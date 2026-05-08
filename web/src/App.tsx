@@ -5,6 +5,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { api } from "./lib/api";
 import { GalleryPage } from "./pages/GalleryPage";
+import { HelpPage } from "./pages/HelpPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ImageChatPage } from "./pages/ImageChatPage";
 import { ProductCreatePage } from "./pages/ProductCreatePage";
@@ -47,6 +48,10 @@ function AppRoutes() {
       <Route
         path="/gallery"
         element={authenticated ? <GalleryPage /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/help"
+        element={authenticated ? <HelpPage /> : <Navigate to="/login" replace />}
       />
       <Route
         path="/settings"

@@ -43,7 +43,7 @@ React/Vite web
 
 前端代码位于 `web/src/`：
 
-- `pages/`：登录、商品列表、创建商品、商品详情、画廊、设置、图片会话页面（当前路由为 `/image-chat` 和
+- `pages/`：登录、商品列表、创建商品、商品详情、画廊、帮助、设置、图片会话页面（当前路由为 `/image-chat` 和
   `/products/:productId/image-chat`）。
 - `components/`：共享 UI，如顶栏、状态标签和图片拖拽上传区。
 - `lib/api.ts`：集中封装 REST API 请求。
@@ -58,7 +58,7 @@ React/Vite web
 不要重新给完整 `ImageSessionDetailResponse` 或完整 `ProductWorkflowResponse` 加 active 轮询；它们包含历史图片、
 节点配置、产物引用和运行记录，运行中高频刷新会放大前端渲染和后端序列化压力。
 
-商品详情页当前是 ProductFlow workbench：画布负责节点、连接线、缩放、平移和节点拖拽；右侧侧栏负责 Details、Runs、Images。画布缩放比例和侧栏宽度是浏览器本地偏好，工作流节点、连接、运行状态和产物仍以数据库为准。
+商品详情页当前是 ProductFlow workbench：画布负责节点、连接线、缩放、平移、节点拖拽、框选和多选；右侧侧栏负责 Details、Runs、Images 和模板。画布缩放比例和侧栏宽度是浏览器本地偏好，工作流节点、连接、运行状态和产物仍以数据库为准。
 
 ## 4. 数据模型主线
 
@@ -93,6 +93,16 @@ ProductWorkflow
   -> WorkflowNodeRun
 ```
 
+画布模板链路：
+
+```text
+CanvasTemplate(builtin full_canvas/node_group)
+  -> product creation or workflow node group insertion
+
+UserCanvasTemplate(node_group)
+  -> reusable selected workflow nodes and internal edges
+```
+
 PostgreSQL 是元数据和运行状态的权威存储；Redis/Dramatiq 只负责投递后台执行消息。
 
 工作流节点的用户语义：
@@ -101,6 +111,12 @@ PostgreSQL 是元数据和运行状态的权威存储；Redis/Dramatiq 只负责
 - `reference_image`：单张当前参考图槽位；手动上传或上游生图填充会替换当前图，旧素材保留在商品历史/素材表。
 - `copy_generation`：文案生成和可编辑文案字段。
 - `image_generation`：生图触发/配置节点；图片产物填充到下游参考图节点，而不是在生图节点本身展示。
+
+画布模板的边界：
+
+- `full_canvas` 模板只用于创建商品时初始化完整工作流。
+- `node_group` 模板只用于已有商品工作台中追加流程，不能包含 `product_context` 节点。
+- 用户节点组模板由多选节点保存而来，只持久化可复用配置和选中节点之间的内部连线，不保存商品资料、生成图片或文案产物。
 
 ## 5. 异步任务与恢复
 
@@ -116,6 +132,8 @@ PostgreSQL 是元数据和运行状态的权威存储；Redis/Dramatiq 只负责
 - enqueue 失败时会把新建 run 标记为失败，避免 active 状态卡死。
 - API 启动时会恢复 queued 的未完成任务/工作流。
 - worker 启动时可重置 stale running 状态后重新投递。
+- 工作流运行和连续生图任务都会序列化 `is_retryable` / `is_cancelable`，前端据此展示重试和取消入口。
+- 图片生成失败会先做用户可读分类，覆盖供应商限流/配额、内容策略、网络中断、请求超时、服务异常和参数不支持等常见情况。
 - 连续生图不再用用户可配置的硬总超时作为产品语义。运行中任务会持久化 `progress_updated_at`、
   `completed_candidates`、当前候选和 provider response 状态；stale running 恢复按最近 progress heartbeat
   判断 idle，旧行才回退到 `started_at`。

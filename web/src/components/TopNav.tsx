@@ -1,4 +1,4 @@
-import { GalleryHorizontalEnd, LayoutGrid, LogOut, MessagesSquare, Settings, Wand2 } from "lucide-react";
+import { BookOpen, GalleryHorizontalEnd, LayoutGrid, LogOut, MessagesSquare, Settings, Wand2 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 interface TopNavProps {
@@ -25,6 +25,12 @@ const navItems = [
     to: "/gallery",
     icon: GalleryHorizontalEnd,
     match: (pathname: string) => pathname.startsWith("/gallery"),
+  },
+  {
+    label: "帮助",
+    to: "/help",
+    icon: BookOpen,
+    match: (pathname: string) => pathname.startsWith("/help"),
   },
   {
     label: "配置",

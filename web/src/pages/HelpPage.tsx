@@ -1,0 +1,1328 @@
+import {
+  ArrowRight,
+  BookOpen,
+  Box,
+  ChevronRight,
+  CircleHelp,
+  GalleryHorizontalEnd,
+  GitBranch,
+  Image,
+  Layers3,
+  Search,
+  Settings,
+  Sparkles,
+  TerminalSquare,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+import { TopNav } from "../components/TopNav";
+
+type SectionBlock =
+  | {
+      type: "paragraph";
+      text: string;
+    }
+  | {
+      type: "list";
+      items: string[];
+    }
+  | {
+      type: "steps";
+      items: string[];
+    }
+  | {
+      type: "table";
+      headers: [string, string];
+      rows: [string, string][];
+    }
+  | {
+      type: "code";
+      text: string;
+    }
+  | {
+      type: "callout";
+      title: string;
+      text: string;
+    };
+
+interface DocSection {
+  id: string;
+  title: string;
+  blocks: SectionBlock[];
+}
+
+interface DocPage {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: LucideIcon;
+  sections: DocSection[];
+}
+
+interface NavGroup {
+  title: string;
+  pages: string[];
+}
+
+interface SearchResult {
+  page: DocPage;
+  matchedSectionTitle: string | null;
+  preview: string;
+  score: number;
+}
+
+const DOC_PAGES: DocPage[] = [
+  {
+    slug: "overview",
+    title: "ProductFlow 文档概览",
+    description: "ProductFlow 是单管理员自托管的商品素材工作台，用于把商品资料、参考图、文案和图片生成流程组织在一个可追踪的工作台中。",
+    category: "入门",
+    icon: BookOpen,
+    sections: [
+      {
+        id: "what-is-productflow",
+        title: "ProductFlow 是什么",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "ProductFlow 面向单人商家、小团队运营者和希望自托管 AI 素材链路的开发者。它把商品信息、图片素材、文案生成、图片生成、运行状态和画廊收藏放在同一个私有工作台中。",
+          },
+          {
+            type: "paragraph",
+            text: "当前版本不是公开注册平台，也不是多租户 SaaS。部署者自己管理数据库、Redis、存储目录和模型密钥。",
+          },
+        ],
+      },
+      {
+        id: "main-surfaces",
+        title: "主要页面",
+        blocks: [
+          {
+            type: "table",
+            headers: ["页面", "用途"],
+            rows: [
+              ["商品/工作台", "创建商品，进入商品详情工作台，组织节点和运行工作流。"],
+              ["文/图生图", "围绕图片结果连续生成、改图、比较候选，并回写商品。"],
+              ["画廊", "集中保存满意的生成图，保留来源、提示词、尺寸、模型和下载入口。"],
+              ["配置", "管理 provider、模型、尺寸、提示词模板、上传限制和密钥。"],
+              ["帮助", "查看当前产品内操作文档。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "recommended-path",
+        title: "推荐阅读路径",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "先阅读“快速开始”，完成一次从商品主图到生成图片的流程。",
+              "再阅读“商品工作台”“画布和节点”“模板”和“生成文案和图片”，理解画布工作台。",
+              "需要收藏和复查生成图时阅读“画廊”。",
+              "需要连续改图时阅读“文/图生图概览”“基图和参考图”“生成设置”和“任务与结果”。",
+              "部署、配置或排障时阅读“配置概览”“模型供应商”“图片工具参数”“提示词模板”和“故障排查”。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "quickstart",
+    title: "快速开始",
+    description: "用最短路径创建一个商品，选择初始画布模板，并生成第一张商品图片。",
+    category: "入门",
+    icon: TerminalSquare,
+    sections: [
+      {
+        id: "before-you-start",
+        title: "开始前",
+        blocks: [
+          {
+            type: "list",
+            items: [
+              "后端 API、worker、PostgreSQL 和 Redis 应处于可用状态。",
+              "如果开启登录门禁，先使用管理员密钥登录。",
+              "准备一张清楚的商品主图，推荐使用 JPG、PNG 或 WebP。",
+            ],
+          },
+        ],
+      },
+      {
+        id: "create-product",
+        title: "创建商品",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "打开顶部导航中的“商品/工作台”。",
+              "点击“新建商品”。",
+              "上传商品主图。",
+              "填写商品名称。",
+              "选择画布模板。首次使用推荐选择“商品主图”。",
+              "点击“创建并继续”。",
+            ],
+          },
+          {
+            type: "callout",
+            title: "完整画布模板只在创建商品时选择",
+            text: "创建商品后，如果需要追加一段流程，请在商品工作台右侧打开“模板”面板，使用节点组模板。",
+          },
+        ],
+      },
+      {
+        id: "first-run",
+        title: "生成第一张图片",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "进入商品工作台后，点击商品节点，在右侧“详情”中补充类目、价格和商品说明。",
+              "选中文案节点，填写生成要求，运行当前节点。",
+              "检查文案输出。需要时直接编辑文案结果。",
+              "选中生图节点，确认它连接到至少一个下游参考图节点。",
+              "填写图片要求，运行当前节点或运行工作流。",
+              "在下游参考图节点或右侧“图片”面板查看并下载结果。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "workbench",
+    title: "商品工作台",
+    description: "商品工作台是 ProductFlow 的核心操作界面。中间是画布，右侧是检查器和辅助面板。",
+    category: "画布工作台",
+    icon: GitBranch,
+    sections: [
+      {
+        id: "layout",
+        title: "界面结构",
+        blocks: [
+          {
+            type: "table",
+            headers: ["区域", "说明"],
+            rows: [
+              ["画布", "展示商品、参考图、文案和生图节点，以及节点之间的连接线。"],
+              ["详情", "编辑选中节点的配置和输出。"],
+              ["日志", "查看工作流运行记录、失败原因和可重试运行。"],
+              ["图片", "查看商品素材、生成图和可填充到参考图节点的图片。"],
+              ["模板", "插入内置节点组，或管理用户保存的节点组模板。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "node-types",
+        title: "节点类型",
+        blocks: [
+          {
+            type: "table",
+            headers: ["节点", "说明"],
+            rows: [
+              ["商品", "商品资料入口，保存名称、类目、价格和说明。"],
+              ["参考图", "单张图片槽位，可手动上传，也可由上游生图节点填充。"],
+              ["文案", "生成并编辑标题、卖点、海报主标题和 CTA。"],
+              ["生图", "触发图片生成。生成结果写入下游参考图节点，不在生图节点自身下载。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "run-model",
+        title: "运行模型",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "节点连接方向决定下游运行时读取哪些上下文。把 A 连到 B，表示 B 运行时可以参考 A。",
+          },
+          {
+            type: "callout",
+            title: "运行前先保存",
+            text: "工作流运行读取的是已保存内容。若“详情”中还有草稿，运行按钮会先尝试保存；如果保存失败，运行不会继续提交。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "canvas-nodes",
+    title: "画布和节点",
+    description: "画布支持缩放、平移、节点拖拽、连接、框选和多选操作。",
+    category: "画布工作台",
+    icon: Box,
+    sections: [
+      {
+        id: "canvas-controls",
+        title: "画布操作",
+        blocks: [
+          {
+            type: "table",
+            headers: ["操作", "说明"],
+            rows: [
+              ["缩放", "鼠标滚轮缩放画布；右下角的 - / 百分比 / + 可以缩小、重置和放大。"],
+              ["平移", "不按任何快捷键时，在画布空白区域按住左键拖动。拖节点、点击按钮、上传和拖连线不会触发平移。"],
+              ["移动单个节点", "直接按住节点主体或标题区域拖动，松手后位置保存。"],
+              ["移动多个节点", "先多选节点，再按住其中任意一个已选节点拖动，整组选中节点会一起移动。"],
+              ["创建连线", "按住节点右侧输出 handle，拖到目标节点左侧输入 handle 后松开。"],
+              ["选择单个节点", "直接点击节点主体或节点左侧输入 handle。右侧会切到“详情”。"],
+              ["追加/移除多选", "按住 Ctrl 点击节点；macOS 也可以按住 Cmd 点击节点。按住 Shift 点击节点同样会切换该节点的选中状态。"],
+              ["框选节点", "按住 Shift，从画布空白区域按住左键拖出选择框，松开后框内节点会成为当前多选组。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "multi-select",
+        title: "多选节点",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "选中多个节点后，画布顶部会出现操作浮层。浮层显示已选数量，并提供“保存模板”“删除”和清空选择按钮。",
+          },
+          {
+            type: "steps",
+            items: [
+              "按住 Ctrl / Cmd / Shift 点击第一个节点，把它加入多选。",
+              "继续按住 Ctrl / Cmd / Shift 点击其他节点，追加或移除选中状态。",
+              "如果节点很多，按住 Shift 后从画布空白处拖出选择框，框住目标节点。",
+              "多选完成后，按住任意一个已选节点拖动，可以移动整组节点。",
+              "点击顶部浮层的“保存模板”，可以把当前多选节点保存为用户节点组模板。",
+              "点击顶部浮层的“删除”，会删除选中节点及相关连线；点击右侧 X 可以清空多选。",
+            ],
+          },
+          {
+            type: "callout",
+            title: "Shift 的两种用法",
+            text: "Shift 点击节点会切换该节点的选中状态；Shift 从画布空白处拖动会触发框选。不按 Shift 从空白处拖动则是平移画布。",
+          },
+          {
+            type: "list",
+            items: [
+              "保存为模板时，选中组不能包含商品节点。",
+              "点击画布空白处会清空多选，保留当前主选节点。",
+              "如果当前节点有未保存草稿，切换选择前页面会先尝试保存。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "templates",
+    title: "模板",
+    description: "ProductFlow 有两类模板：创建商品时使用的完整画布模板，以及工作台内追加流程的节点组模板。",
+    category: "画布工作台",
+    icon: Layers3,
+    sections: [
+      {
+        id: "template-types",
+        title: "模板类型",
+        blocks: [
+          {
+            type: "table",
+            headers: ["类型", "用途"],
+            rows: [
+              ["完整画布模板", "创建商品时初始化整个工作流。"],
+              ["内置节点组模板", "在已有商品工作台里追加常见流程。"],
+              ["用户节点组模板", "从当前画布多选节点后保存，供之后复用。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "built-in-templates",
+        title: "内置完整画布模板",
+        blocks: [
+          {
+            type: "list",
+            items: [
+              "空白画布：只保留商品资料入口，适合自由编排。",
+              "商品主图：适合电商列表首图和详情首屏图。",
+              "模特/生活方式图：适合服饰、美妆、家居等场景。",
+              "使用场景图：适合空间、季节和搭配关系。",
+              "活动/营销图：适合促销位、活动入口和投放素材。",
+            ],
+          },
+        ],
+      },
+      {
+        id: "save-user-template",
+        title: "保存用户模板",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "在画布中多选两个或更多节点：按住 Ctrl / Cmd / Shift 点击节点，或按住 Shift 从空白处框选。",
+              "确认选中节点不包含商品节点。",
+              "点击顶部多选浮层中的“保存模板”。",
+              "填写模板名称和可选描述。",
+              "保存后在右侧“模板”面板中查看自定义模板。",
+            ],
+          },
+          {
+            type: "callout",
+            title: "模板不会保存产物",
+            text: "用户模板只保存可复用配置和选中节点之间的内部连线，不保存商品资料、已生成图片或文案结果。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "generate-assets",
+    title: "生成文案和图片",
+    description: "文案节点负责生成文字资产，生图节点负责触发图片生成并填充下游参考图节点。",
+    category: "画布工作台",
+    icon: Image,
+    sections: [
+      {
+        id: "copy-generation",
+        title: "生成文案",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "选中商品节点，确认商品资料已保存。",
+              "选中文案节点。",
+              "填写生成要求，例如目标人群、语气、重点卖点。",
+              "运行当前节点。",
+              "检查并编辑生成后的标题、卖点、主标题和 CTA。",
+            ],
+          },
+        ],
+      },
+      {
+        id: "image-generation",
+        title: "生成图片",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "选中生图节点。",
+              "确认生图节点连接到至少一个下游参考图节点。",
+              "填写图片要求，包括主体、背景、光线、构图和用途。",
+              "运行当前节点或运行工作流。",
+              "在下游参考图节点或“图片”面板查看结果。",
+            ],
+          },
+          {
+            type: "callout",
+            title: "生图节点不是图片槽位",
+            text: "生成图片会写入下游参考图节点。若没有下游参考图，系统会提示先连接图片/参考图节点。",
+          },
+        ],
+      },
+      {
+        id: "prompt-pattern",
+        title: "提示词写法",
+        blocks: [
+          {
+            type: "code",
+            text: "白色托特包放在通勤桌面，旁边有笔记本电脑和咖啡，干净自然光，商品主体完整，纹理清晰，适合电商主图。",
+          },
+          {
+            type: "paragraph",
+            text: "每轮只改一两个因素，例如背景、构图、光线或主体细节。一次改太多会很难判断哪句话影响了结果。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "image-chat",
+    title: "文/图生图概览",
+    description: "文/图生图用于独立图片会话、连续改图、多候选比较、参考图控制，以及把结果回写商品或投至画廊。",
+    category: "文/图生图",
+    icon: Sparkles,
+    sections: [
+      {
+        id: "layout",
+        title: "页面结构",
+        blocks: [
+          {
+            type: "table",
+            headers: ["区域", "用途"],
+            rows: [
+              ["左侧会话列表", "新建、选择、重命名或删除文/图生图会话。每个会话保留自己的历史、参考图和生成任务。"],
+              ["中间结果区", "展示当前选中的生成候选、生成中占位、失败状态、下载按钮和“投至画廊”按钮。"],
+              ["底部历史记录", "按分支展示历史结果。点击已完成图片会把它选为当前结果，并作为下一轮基图。"],
+              ["右侧生成设置", "管理关联商品、保存到商品、会话参考图、画面描述、尺寸、候选数量和高级图片工具参数。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "create-session",
+        title: "创建和选择会话",
+        blocks: [
+          {
+            type: "steps",
+            items: [
+              "打开顶部导航中的“文/图生图”。",
+              "点击左侧会话区域的“新建”按钮创建会话。",
+              "如果从商品详情进入，页面会进入商品关联模式；如果从全局入口进入，可以先自由生成，也可以在右侧选择目标商品。",
+              "点击左侧任意会话卡片切换会话。卡片会显示最近结果缩略图、轮数和更新时间。",
+              "需要改会话名时，打开右侧“生成设置”，点击“重命名”，输入名称后点击保存按钮。",
+            ],
+          },
+          {
+            type: "callout",
+            title: "会话和商品不是同一个对象",
+            text: "文/图生图会话可以关联商品，也可以自由生成。只有点击“加入参考图”“保存为参考图”或“设为商品主图参考”这类保存按钮时，当前候选才会写回商品素材库。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "image-chat-references",
+    title: "基图和参考图",
+    description: "说明文/图生图里基图、会话参考图、商品参考图的区别，以及单轮图片上下文数量限制。",
+    category: "文/图生图",
+    icon: Sparkles,
+    sections: [
+      {
+        id: "base-image",
+        title: "基图和参考图的区别",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "文/图生图每一轮可以同时使用“基图”和“参考图”。基图来自历史记录中选中的已完成图片，用于表达“在这张图基础上继续改”。参考图来自会话参考图或商品参考图，用于补充风格、材质、姿态、背景等上下文。",
+          },
+          {
+            type: "steps",
+            items: [
+              "第一轮没有历史图时，直接在“画面描述”里写想生成的画面。",
+              "生成完成后，在底部历史记录点击一张已完成图片。中间结果区会显示“已选基图”。",
+              "如需更多视觉参考，在右侧“会话参考图”上传图片，或从商品参考图区域选择已有素材。",
+              "勾选参考图后再提交生成。系统会把基图和已选参考图一起作为本轮上下文。",
+            ],
+          },
+        ],
+      },
+      {
+        id: "reference-limit",
+        title: "图片上下文数量",
+        blocks: [
+          {
+            type: "callout",
+            title: "单轮最多 6 张",
+            text: "单轮最多选择 6 张图片上下文，这个数量包含历史基图和显式选择的参考图。如果已经选了基图，最多还能再选 5 张参考图。",
+          },
+          {
+            type: "list",
+            items: [
+              "想保留主体角度时，优先选择历史结果作为基图。",
+              "想补充材质、风格、背景或姿态时，选择会话参考图或商品参考图。",
+              "如果结果偏离太多，减少参考图数量通常比继续堆参考图更容易定位问题。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "image-chat-generation",
+    title: "生成设置",
+    description: "说明画面描述、尺寸、候选数量和高级图片工具参数如何影响文/图生图任务。",
+    category: "文/图生图",
+    icon: Sparkles,
+    sections: [
+      {
+        id: "generation-settings",
+        title: "字段说明",
+        blocks: [
+          {
+            type: "table",
+            headers: ["设置", "说明"],
+            rows: [
+              ["画面描述", "本轮真正提交给生成任务的用户要求。写清主体、保留项、变化项、背景、构图、光线和用途。"],
+              ["尺寸", "选择常用 1K / 2K / 4K 预设，或输入自定义宽高。提交前会按后端最大单边限制校准。"],
+              ["候选数量", "决定本轮创建多少张候选。多候选会在历史记录中显示多个占位，完成后分别替换为结果。"],
+              ["生成设置 / 高级", "普通尺寸、数量和描述在基础设置里；provider tool 参数在高级区域里。"],
+              ["图片工具参数", "只显示配置页“可用 Tool 字段”中启用的字段，例如质量、格式、背景、输入保真度等。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "prompt-pattern",
+        title: "连续改图写法",
+        blocks: [
+          {
+            type: "code",
+            text: "保持包的角度不变，背景换成更明亮的办公室。减少桌面杂物，只保留电脑和咖啡；包身纹理要清晰，阴影柔和。",
+          },
+          {
+            type: "paragraph",
+            text: "连续改图时，建议明确写“保持什么不变”和“只修改什么”。如果只写一个很宽泛的新描述，模型可能会把它当成重新生成，而不是局部调整。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "image-chat-tasks",
+    title: "任务与结果",
+    description: "说明文/图生图任务状态、重试、取消、下载、投至画廊和保存回商品的规则。",
+    category: "文/图生图",
+    icon: Sparkles,
+    sections: [
+      {
+        id: "run-status",
+        title: "运行状态、重试和取消",
+        blocks: [
+          {
+            type: "table",
+            headers: ["状态", "页面表现"],
+            rows: [
+              ["排队中", "中间结果区和历史记录会显示占位，可能显示队列位置、前方任务数和全局活跃数量。"],
+              ["生成中", "占位会显示当前候选序号、候选总数、最近进度和 provider 状态。"],
+              ["生成完成", "占位替换为真实候选图，页面提示“新候选已生成”。"],
+              ["失败", "显示失败原因；如果任务可重试，会出现“重试生成”。"],
+              ["已取消", "显示任务已取消，不再写入新的候选结果。"],
+            ],
+          },
+          {
+            type: "list",
+            items: [
+              "运行中的任务可点击“取消生成”。",
+              "失败且可重试的任务可点击“重试生成”。重试复用原任务的提示词、尺寸、参考图和高级参数。",
+              "如果你已经修改了画面描述、尺寸或参考图，应提交新一轮生成，而不是重试旧失败任务。",
+              "页面运行中只轮询轻量状态，任务结束后再刷新完整会话详情。",
+            ],
+          },
+        ],
+      },
+      {
+        id: "save-results",
+        title: "保存结果",
+        blocks: [
+          {
+            type: "table",
+            headers: ["操作", "结果"],
+            rows: [
+              ["下载", "下载当前选中候选的原图。"],
+              ["投至画廊", "把当前候选保存到全局画廊，保留来源会话、商品、提示词、尺寸、模型和下载入口。"],
+              ["加入参考图 / 保存为参考图", "把当前候选写入目标商品的参考图素材，之后商品工作台和文/图生图都可以继续引用。"],
+              ["设为商品主图参考", "把当前候选保存为商品主图参考素材，用于后续商品素材链路。"],
+            ],
+          },
+          {
+            type: "callout",
+            title: "保存动作需要先选中候选",
+            text: "只有中间结果区显示已完成图片时，下载、投至画廊和保存到商品才有明确目标。选中生成中占位或没有结果时，这些动作不会提交。",
+          },
+        ],
+      },
+      {
+        id: "mobile-layout",
+        title: "移动端布局",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "小屏幕上，文/图生图会改成单栏布局。页面按会话、当前结果、历史记录、生成设置和参考图区域顺序展开，不再维持桌面端三栏结构。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "gallery",
+    title: "画廊",
+    description: "画廊用于收藏满意的文/图生图结果，方便集中浏览和下载。",
+    category: "画廊",
+    icon: GalleryHorizontalEnd,
+    sections: [
+      {
+        id: "save-to-gallery",
+        title: "保存到画廊",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "文/图生图结果可以保存到画廊。画廊条目保留来源会话、关联商品、提示词、尺寸、模型和下载入口。",
+          },
+          {
+            type: "list",
+            items: [
+              "适合保存暂时不挂回商品、但以后可能复用的背景或构图。",
+              "适合保存需要集中给别人挑选的候选图。",
+              "适合保存调参过程中效果不错但不是当前最终稿的图片。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "settings",
+    title: "配置概览",
+    description: "配置页用于管理运行时业务配置。基础设施配置仍由环境变量控制，不在设置页覆盖。",
+    category: "配置",
+    icon: Settings,
+    sections: [
+      {
+        id: "settings-access",
+        title: "访问和保存规则",
+        blocks: [
+          {
+            type: "list",
+            items: [
+              "配置页需要先登录；如果设置页要求二次解锁，还需要输入 `SETTINGS_ACCESS_TOKEN`。",
+              "配置项会显示来源。数据库覆盖值会标记为数据库来源；未覆盖时使用 env/default。",
+              "只提交发生变化的字段。密钥字段留空不会覆盖已有值。",
+              "点击恢复默认会删除数据库覆盖值，让该字段回到 env/default。",
+            ],
+          },
+        ],
+      },
+      {
+        id: "env-only",
+        title: "Env-only 配置",
+        blocks: [
+          {
+            type: "list",
+            items: [
+              "`DATABASE_URL`、`REDIS_URL`、`SESSION_SECRET`、`ADMIN_ACCESS_KEY` 等基础设施配置不支持设置页覆盖。",
+              "设置页二次解锁由 `SETTINGS_ACCESS_TOKEN` 保护。",
+              "关闭登录门禁不会关闭设置页二次解锁。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "settings-providers",
+    title: "模型供应商",
+    description: "说明文案生成和图片生成相关 provider、模型、密钥、Base URL 和图片生成基础参数。",
+    category: "配置",
+    icon: Settings,
+    sections: [
+      {
+        id: "text-settings",
+        title: "文案生成",
+        blocks: [
+          {
+            type: "table",
+            headers: ["字段", "说明"],
+            rows: [
+              ["文案供应商", "控制商品理解和文案生成使用 `mock` 还是真实 OpenAI Responses 兼容接口。开发自测可用 Mock；真实生成需要 OpenAI。"],
+              ["文案 API Key", "仅文案供应商为 OpenAI 时使用。接口不会回显已有密钥；输入新值才会覆盖。"],
+              ["文案 Base URL", "OpenAI 兼容接口地址。留空使用 SDK 默认地址；使用代理或兼容网关时填写。"],
+              ["商品理解模型", "用于把商品名称、类目、价格、说明等整理成 CreativeBrief。"],
+              ["文案生成模型", "用于生成标题、卖点、海报主标题和 CTA。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "image-settings",
+        title: "图片生成",
+        blocks: [
+          {
+            type: "table",
+            headers: ["字段", "说明"],
+            rows: [
+              ["图片供应商", "控制工作台 AI 生图和文/图生图使用 `mock` 还是 OpenAI Responses 图片生成。"],
+              ["图片 API Key", "仅图片供应商为 OpenAI Responses 时使用。密钥不会回显。"],
+              ["图片 Base URL", "OpenAI 兼容接口地址。留空使用 SDK 默认地址。"],
+              ["图片模型", "发送给图片 provider 的默认图片模型。"],
+              ["Responses 后台响应模式", "默认开启。长任务先拿到 response_id 再轮询状态；如果网关明确不支持，会自动回退同步请求。"],
+              ["生图最大单边", "工作台生图和文/图生图的最大宽/高像素。最大面积同步使用该值平方。"],
+              ["主图尺寸（兼容默认）", "高级兼容值。只有当 provider 输入未明确传入 image_size 且类型为主图时才使用。新工作流优先看节点里的尺寸选择器。"],
+              ["促销海报尺寸（兼容默认）", "高级兼容值。只有当 provider 输入未明确传入 image_size 且类型为促销海报时才使用。"],
+              ["海报生成模式", "`模板渲染` 不消耗图片模型；`AI 生成` 会调用图片供应商。"],
+              ["海报字体路径", "模板海报和 mock 图片中用于中文文字渲染的字体文件。"],
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "settings-image-tool",
+    title: "图片工具参数",
+    description: "说明 Responses 图片工具高级字段的含义，以及它们和前端可见控件、后端持久化的关系。",
+    category: "配置",
+    icon: Settings,
+    sections: [
+      {
+        id: "tool-settings",
+        title: "字段说明",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "图片工具参数是发送给 Responses `image_generation` tool 的高级字段。配置页的“可用 Tool 字段”决定前端哪些高级控件可见，也决定后端哪些字段可以持久化并发送给 provider。",
+          },
+          {
+            type: "table",
+            headers: ["字段", "说明"],
+            rows: [
+              ["可用 Tool 字段", "多选字段。未勾选的高级字段不会在前端显示，也不会发送给 provider。"],
+              ["Tool 模型", "发送到 image_generation tool 内部的模型字段。留空不发送，需要 provider 支持。"],
+              ["质量", "可选默认、Auto、Low、Medium、High。用于支持质量参数的 provider。"],
+              ["格式", "可选默认、PNG、JPEG、WebP。影响 provider 输出格式。"],
+              ["压缩", "0-100；留空不发送。通常只对 JPEG/WebP 等格式有意义。"],
+              ["背景", "可选默认、Auto、Opaque、Transparent。仅在可用 Tool 字段勾选 background 后发送。"],
+              ["审核", "可选默认、Auto、Low。是否生效取决于 provider 支持。"],
+              ["Action", "可选默认、Auto、Generate、Edit。用于提示 provider 当前更像生成还是编辑。"],
+              ["Input fidelity", "可选默认、Low、High。用于控制输入参考图保真度，需 provider 支持。"],
+              ["Partial", "0-3；留空不发送。用于支持 partial images 的 provider。"],
+              ["Provider n", "高级 provider 字段，不改变 ProductFlow 文/图生图“候选数量”的产品语义。"],
+            ],
+          },
+          {
+            type: "callout",
+            title: "候选数量和 Provider n 不等价",
+            text: "文/图生图右侧的“候选数量”会创建 ProductFlow 自己的候选任务语义；`Provider n` 是透传给 provider 的高级字段，默认不应把它当成页面候选数量来用。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "settings-prompts",
+    title: "提示词模板",
+    description: "说明全局提示词模板负责哪些默认行为，以及哪些要求应该留在单次节点或文/图生图输入里。",
+    category: "配置",
+    icon: Settings,
+    sections: [
+      {
+        id: "prompt-settings",
+        title: "字段说明",
+        blocks: [
+          {
+            type: "table",
+            headers: ["字段", "说明"],
+            rows: [
+              ["商品理解系统提示词", "用于商品资料理解，要求模型输出 CreativeBrief JSON。"],
+              ["文案生成系统提示词", "用于主图/海报文案生成，要求模型输出 Copy JSON。"],
+              ["海报生图提示词模板", "用于工作台 AI 生图。常用占位符包括 `instruction`、`size`、`context_block`、`reference_policy`、`kind` 等。"],
+              ["图片改图提示词模板", "用于工作台参考图/生成图继续生图。适合带上游文案或参考图上下文的场景。"],
+              ["工作台视觉参考规则", "填入工作台生图模板的 `reference_policy` 占位符，用于控制视觉参考优先级规则。"],
+              ["文/图生图提示词模板", "用于文/图生图对话。可用占位符：`prompt`、`size`、`history_block`。"],
+            ],
+          },
+          {
+            type: "callout",
+            title: "单次要求不要写进全局模板",
+            text: "如果只是这一次想要某种背景、构图或语气，应写在节点要求或文/图生图的画面描述里。提示词模板适合长期默认行为。",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "settings-operations",
+    title: "上传、队列与安全",
+    description: "说明上传限制、生成并发、任务恢复、provider 超时和安全开关这些运维类配置。",
+    category: "配置",
+    icon: Settings,
+    sections: [
+      {
+        id: "upload-and-queue",
+        title: "上传、队列和恢复",
+        blocks: [
+          {
+            type: "table",
+            headers: ["字段", "说明"],
+            rows: [
+              ["单图最大字节数", "限制单张上传图片大小。"],
+              ["最多参考图数量", "限制参考图数量，文/图生图单轮上下文还会受到 6 张图片上下文限制。"],
+              ["最大像素数", "限制上传图片的像素面积。"],
+              ["允许图片 MIME", "逗号分隔，例如 `image/png,image/jpeg,image/webp`。"],
+              ["全局生成并发上限", "工作流和文/图生图共享的资源保护阈值。达到上限时页面会提示稍后重试。"],
+              ["文/图生图进度闲置恢复阈值", "worker 启动恢复时，running 文/图生图任务会按最近 progress heartbeat 判断是否闲置。"],
+              ["工作流生图 Provider 超时", "工作流 AI 生图节点单次 provider 调用的项目级超时上界。超时后任务安全失败并释放队列容量。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "security-settings",
+        title: "安全与运维",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "密钥字段不会在 API 响应和页面中回显。留空保存不会覆盖已有密钥；只有输入新值才会写入数据库覆盖。",
+          },
+          {
+            type: "table",
+            headers: ["字段", "说明"],
+            rows: [
+              ["要求登录访问密钥", "默认开启。普通工作台和私有 API 需要 `ADMIN_ACCESS_KEY` 登录；关闭后仍需 `SETTINGS_ACCESS_TOKEN` 才能查看和修改系统配置。"],
+              ["启用业务删除", "默认关闭。用于体验站禁止整条商品和文/图生图会话被删除，保留溯源证据。工作流节点/连线编辑和参考图删除不受该开关影响。"],
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "troubleshooting",
+    title: "故障排查",
+    description: "先看页面上的失败原因，再决定重试、取消、修改提示词、调整参数或检查 provider 配置。",
+    category: "配置",
+    icon: TriangleAlert,
+    sections: [
+      {
+        id: "failure-categories",
+        title: "失败分类",
+        blocks: [
+          {
+            type: "table",
+            headers: ["提示", "处理方式"],
+            rows: [
+              ["配额或限流", "稍后重试，或降低并发。"],
+              ["内容策略", "调整提示词或参考图。"],
+              ["网络中断", "检查网络、代理和 provider 可用性。"],
+              ["请求超时", "稍后重试；重复出现时检查 provider 状态和超时配置。"],
+              ["参数不支持", "检查尺寸、模型和高级参数。"],
+            ],
+          },
+        ],
+      },
+      {
+        id: "retry-or-new-run",
+        title: "重试还是重新运行",
+        blocks: [
+          {
+            type: "paragraph",
+            text: "重试适合临时失败，通常复用本次任务的提示词、尺寸、参考图和高级参数。如果你已经修改商品资料、文案、参考图或图片要求，应发起新的运行。",
+          },
+        ],
+      },
+      {
+        id: "stuck-running",
+        title: "任务长时间运行中",
+        blocks: [
+          {
+            type: "list",
+            items: [
+              "运行中页面只轮询轻量 status，任务结束后才刷新完整详情。",
+              "可取消的运行会显示取消入口。",
+              "API 和 worker 启动时会恢复未完成任务。",
+              "如果刷新后仍没有变化，检查后端、worker、Redis 和 provider 日志。",
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: "入门",
+    pages: ["overview", "quickstart"],
+  },
+  {
+    title: "画布工作台",
+    pages: ["workbench", "canvas-nodes", "templates", "generate-assets"],
+  },
+  {
+    title: "画廊",
+    pages: ["gallery"],
+  },
+  {
+    title: "文/图生图",
+    pages: ["image-chat", "image-chat-references", "image-chat-generation", "image-chat-tasks"],
+  },
+  {
+    title: "配置",
+    pages: [
+      "settings",
+      "settings-providers",
+      "settings-image-tool",
+      "settings-prompts",
+      "settings-operations",
+      "troubleshooting",
+    ],
+  },
+];
+
+function findPage(slug: string | null): DocPage {
+  return DOC_PAGES.find((page) => page.slug === slug) ?? DOC_PAGES[0];
+}
+
+function pageIndex(page: DocPage): number {
+  return DOC_PAGES.findIndex((item) => item.slug === page.slug);
+}
+
+function blockSearchText(block: SectionBlock): string {
+  if (block.type === "paragraph" || block.type === "code") {
+    return block.text;
+  }
+  if (block.type === "list" || block.type === "steps") {
+    return block.items.join(" ");
+  }
+  if (block.type === "table") {
+    return [block.headers.join(" "), ...block.rows.map((row) => row.join(" "))].join(" ");
+  }
+  return `${block.title} ${block.text}`;
+}
+
+function collectPageSearchText(page: DocPage): string {
+  return [
+    page.title,
+    page.description,
+    page.category,
+    ...page.sections.flatMap((section) => [section.title, ...section.blocks.map(blockSearchText)]),
+  ].join(" ");
+}
+
+function findMatchedSection(page: DocPage, query: string): DocSection | null {
+  return (
+    page.sections.find((section) => {
+      const sectionText = [section.title, ...section.blocks.map(blockSearchText)].join(" ").toLowerCase();
+      return sectionText.includes(query);
+    }) ?? null
+  );
+}
+
+function getSearchPreview(page: DocPage, query: string): string {
+  const source = collectPageSearchText(page).replace(/\s+/g, " ").trim();
+  const index = source.toLowerCase().indexOf(query);
+  if (index === -1) {
+    return page.description;
+  }
+  const start = Math.max(0, index - 24);
+  const end = Math.min(source.length, index + query.length + 44);
+  return `${start > 0 ? "..." : ""}${source.slice(start, end)}${end < source.length ? "..." : ""}`;
+}
+
+function searchDocPages(queryText: string): SearchResult[] {
+  const query = queryText.trim().toLowerCase();
+  if (!query) {
+    return [];
+  }
+  return DOC_PAGES.flatMap((page) => {
+    const pageText = collectPageSearchText(page).toLowerCase();
+    if (!pageText.includes(query)) {
+      return [];
+    }
+    const matchedSection = findMatchedSection(page, query);
+    const titleMatch = page.title.toLowerCase().includes(query);
+    const categoryMatch = page.category.toLowerCase().includes(query);
+    const descriptionMatch = page.description.toLowerCase().includes(query);
+    const score = (titleMatch ? 4 : 0) + (categoryMatch ? 2 : 0) + (descriptionMatch ? 1 : 0);
+    return [
+      {
+        page,
+        matchedSectionTitle: matchedSection?.title ?? null,
+        preview: getSearchPreview(page, query),
+        score,
+      },
+    ];
+  })
+    .sort((left, right) => right.score - left.score || pageIndex(left.page) - pageIndex(right.page))
+    .slice(0, 8);
+}
+
+function renderBlock(block: SectionBlock) {
+  if (block.type === "paragraph") {
+    return <p className="text-[15px] leading-7 text-slate-700">{block.text}</p>;
+  }
+  if (block.type === "list") {
+    return (
+      <ul className="list-disc space-y-2 pl-5 text-[15px] leading-7 text-slate-700">
+        {block.items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (block.type === "steps") {
+    return (
+      <ol className="space-y-3">
+        {block.items.map((item, index) => (
+          <li key={item} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 text-[15px] leading-7 text-slate-700">
+            <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600">
+              {index + 1}
+            </span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  if (block.type === "table") {
+    return (
+      <div className="overflow-hidden rounded-lg border border-slate-200">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="w-[32%] border-b border-slate-200 px-4 py-3 font-semibold">{block.headers[0]}</th>
+              <th className="border-b border-slate-200 px-4 py-3 font-semibold">{block.headers[1]}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {block.rows.map(([left, right]) => (
+              <tr key={`${left}-${right}`}>
+                <td className="px-4 py-3 font-medium text-slate-950">{left}</td>
+                <td className="px-4 py-3 leading-6 text-slate-700">{right}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (block.type === "code") {
+    return (
+      <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-950 px-4 py-3 text-sm leading-6 text-slate-100">
+        <code>{block.text}</code>
+      </pre>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 px-4 py-3">
+      <div className="text-sm font-semibold text-indigo-900">{block.title}</div>
+      <p className="mt-1 text-sm leading-6 text-indigo-900/80">{block.text}</p>
+    </div>
+  );
+}
+
+export function HelpPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState("");
+  const page = findPage(searchParams.get("page"));
+  const currentIndex = pageIndex(page);
+  const previousPage = currentIndex > 0 ? DOC_PAGES[currentIndex - 1] : null;
+  const nextPage = currentIndex < DOC_PAGES.length - 1 ? DOC_PAGES[currentIndex + 1] : null;
+  const PageIcon = page.icon;
+  const pagesBySlug = useMemo(() => new Map(DOC_PAGES.map((item) => [item.slug, item])), []);
+  const searchResults = useMemo(() => searchDocPages(searchQuery), [searchQuery]);
+  const normalizedSearchQuery = searchQuery.trim();
+
+  const openPage = (slug: string) => {
+    setSearchParams({ page: slug });
+    setSearchQuery("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col bg-white">
+      <TopNav breadcrumbs="文档" onHome={() => navigate("/products")} />
+
+      <main className="mx-auto grid w-full max-w-[1440px] flex-1 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_220px]">
+        <aside className="border-b border-slate-200 bg-slate-50/70 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+          <div className="border-b border-slate-200 px-5 py-5">
+            <button
+              type="button"
+              onClick={() => openPage("overview")}
+              className="flex items-center gap-2 text-left text-base font-semibold text-slate-950"
+            >
+              <BookOpen size={18} className="text-indigo-600" />
+              ProductFlow 文档
+            </button>
+            <div className="relative mt-4">
+              <label htmlFor="help-search" className="sr-only">
+                搜索文档
+              </label>
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                id="help-search"
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="搜索文档"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-9 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              />
+              {normalizedSearchQuery ? (
+                <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {searchResults.length > 0 ? (
+                    <div className="max-h-[360px] overflow-y-auto py-1">
+                      {searchResults.map((result) => (
+                        <button
+                          key={result.page.slug}
+                          type="button"
+                          onClick={() => openPage(result.page.slug)}
+                          className="block w-full px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-500">
+                              {result.page.category}
+                            </span>
+                            <span className="min-w-0 truncate text-sm font-semibold text-slate-950">
+                              {result.page.title}
+                            </span>
+                          </div>
+                          {result.matchedSectionTitle ? (
+                            <div className="mt-1 text-xs font-medium text-indigo-700">{result.matchedSectionTitle}</div>
+                          ) : null}
+                          <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{result.preview}</p>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-3 text-sm text-slate-500">没有找到匹配文档</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <nav className="hidden space-y-6 px-3 py-5 lg:block" aria-label="文档导航">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.title}</div>
+                <div className="mt-2 space-y-1">
+                  {group.pages.map((slug) => {
+                    const item = pagesBySlug.get(slug);
+                    if (!item) {
+                      return null;
+                    }
+                    const Icon = item.icon;
+                    const active = item.slug === page.slug;
+                    return (
+                      <button
+                        key={item.slug}
+                        type="button"
+                        onClick={() => openPage(item.slug)}
+                        aria-current={active ? "page" : undefined}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
+                          active
+                            ? "bg-white font-semibold text-indigo-700 shadow-sm ring-1 ring-slate-200"
+                            : "text-slate-600 hover:bg-white hover:text-slate-950"
+                        }`}
+                      >
+                        <Icon size={15} className={active ? "text-indigo-600" : "text-slate-400"} />
+                        <span className="min-w-0 truncate">{item.title}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          <div className="p-4 lg:hidden">
+            <label htmlFor="doc-page" className="mb-2 block text-xs font-semibold text-slate-500">
+              文档页面
+            </label>
+            <select
+              id="doc-page"
+              value={page.slug}
+              onChange={(event) => openPage(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              {NAV_GROUPS.map((group) => (
+                <optgroup key={group.title} label={group.title}>
+                  {group.pages.map((slug) => {
+                    const item = pagesBySlug.get(slug);
+                    return item ? (
+                      <option key={item.slug} value={item.slug}>
+                        {item.title}
+                      </option>
+                    ) : null;
+                  })}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        </aside>
+
+        <article className="min-w-0 px-5 py-8 sm:px-8 lg:px-12 lg:py-12">
+          <header className="max-w-3xl">
+            <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-500">
+              <span>{page.category}</span>
+              <ChevronRight size={14} />
+              <span>{page.title}</span>
+            </div>
+            <div className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-indigo-600">
+              <PageIcon size={20} />
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">{page.title}</h1>
+            <p className="mt-4 text-base leading-7 text-slate-600">{page.description}</p>
+          </header>
+
+          <div className="mt-10 max-w-3xl space-y-10">
+            {page.sections.map((section) => (
+              <section key={section.id} id={section.id} className="scroll-mt-6">
+                <h2 className="text-xl font-semibold tracking-tight text-slate-950">{section.title}</h2>
+                <div className="mt-4 space-y-4">{section.blocks.map((block, index) => <div key={index}>{renderBlock(block)}</div>)}</div>
+              </section>
+            ))}
+          </div>
+
+          <footer className="mt-12 grid max-w-3xl gap-3 border-t border-slate-200 pt-6 sm:grid-cols-2">
+            {previousPage ? (
+              <button
+                type="button"
+                onClick={() => openPage(previousPage.slug)}
+                className="rounded-lg border border-slate-200 px-4 py-3 text-left transition-colors hover:bg-slate-50"
+              >
+                <div className="text-xs font-medium text-slate-500">上一页</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{previousPage.title}</div>
+              </button>
+            ) : (
+              <div />
+            )}
+            {nextPage ? (
+              <button
+                type="button"
+                onClick={() => openPage(nextPage.slug)}
+                className="rounded-lg border border-slate-200 px-4 py-3 text-left transition-colors hover:bg-slate-50 sm:text-right"
+              >
+                <div className="text-xs font-medium text-slate-500">下一页</div>
+                <div className="mt-1 inline-flex items-center text-sm font-semibold text-indigo-700">
+                  {nextPage.title}
+                  <ArrowRight size={14} className="ml-1" />
+                </div>
+              </button>
+            ) : null}
+          </footer>
+        </article>
+
+        <aside className="hidden border-l border-slate-200 px-5 py-12 lg:block">
+          <div className="sticky top-8">
+            <div className="text-sm font-semibold text-slate-950">本页内容</div>
+            <nav className="mt-3 space-y-2" aria-label="本页内容">
+              {page.sections.map((section) => (
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  className="block border-l border-slate-200 pl-3 text-sm leading-5 text-slate-500 transition-colors hover:border-indigo-400 hover:text-slate-950"
+                >
+                  {section.title}
+                </a>
+              ))}
+            </nav>
+            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <CircleHelp size={15} className="text-indigo-600" />
+                需要继续操作？
+              </div>
+              <div className="mt-3 grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate("/products")}
+                  className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  打开商品工作台
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/image-chat")}
+                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:text-slate-950"
+                >
+                  打开文/图生图
+                </button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+  );
+}

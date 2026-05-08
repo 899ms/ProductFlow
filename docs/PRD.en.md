@@ -23,7 +23,7 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 ### 3.1 Product Creative Chain
 
 1. Log in with an admin key.
-2. Create a product, upload the product source image, and fill in the product name.
+2. Create a product, upload the product source image, fill in the product name, and choose a blank canvas or ecommerce scenario template.
 3. Enter the product workbench and add category, price, product notes, and generation direction.
 4. Use copy nodes to generate and edit the product title, selling points, poster headline, and CTA.
 5. Use image-generation nodes to generate images and fill downstream reference-image slots.
@@ -43,16 +43,23 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 
 1. Open the workflow workbench in the product detail page.
 2. Create or adjust nodes: product context, reference image, copy generation, and image generation.
-3. Connect nodes to form a DAG.
-4. Start a background workflow run.
-5. Persist run state, node state, and failure reasons in the database.
-6. While running, the frontend polls lightweight workflow status; after completion, it refreshes full workflow, product detail, and historical artifacts.
+3. Use built-in node-group templates to append common flows, or multi-select nodes and save them as user node-group templates.
+4. Connect nodes to form a DAG.
+5. Start a background workflow run, then cancel running work or retry failed runs when needed.
+6. Persist run state, node state, and failure reasons in the database.
+7. While running, the frontend polls lightweight workflow status; after completion, it refreshes full workflow, product detail, and historical artifacts.
 
 ### 3.4 Gallery
 
 1. Save generated image-session results to the gallery.
 2. Browse collected generated images at `/gallery` by generation time.
 3. Gallery entries keep source session, linked product, prompt, size, model, and download entrypoint.
+
+### 3.5 In-Product Help
+
+1. Open `/help` from the top navigation.
+2. Review quick start, workbench, templates, run state, supported operations, and common questions.
+3. Return from the help page to the product workbench or Image chat.
 
 ## 4. Core Objects
 
@@ -65,6 +72,7 @@ Non-target users: teams that need multi-tenant isolation, complex RBAC, payment 
 - `ImageSessionRound` / `ImageSessionGenerationTask`: iterative image candidates and durable async generation-task state.
 - `ImageGalleryEntry`: saved generated-image collection record.
 - `ProductWorkflow` / `WorkflowNode` / `WorkflowEdge` / `WorkflowRun`: product DAG workflow structure and run records.
+- `CanvasTemplate` / `UserCanvasTemplate`: built-in full-canvas templates, built-in node-group templates, and user-saved node-group templates.
 - `AppSetting`: runtime business configuration override.
 
 ## 5. Current Pages
@@ -76,6 +84,7 @@ Implemented frontend pages:
 - `/products/new`: create product.
 - `/products/:productId`: product detail, copy/poster main chain, history, and DAG workflow.
 - `/gallery`: generated image gallery.
+- `/help`: in-product help page.
 - `/settings`: provider, model, upload limit, job retry, and other business configuration.
 - `/image-chat` and `/products/:productId/image-chat`: iterative image generation and attaching assets back to products.
 
@@ -87,11 +96,14 @@ For a single self-hosted deployment, the current version should be able to:
 2. Store products, assets, copy, posters, tasks, image sessions, and workflow state in PostgreSQL.
 3. Use Redis + Dramatiq to execute async copy/poster jobs and product workflows.
 4. Use durable `ImageSessionGenerationTask` records for iterative image generation, including queue position, failure reason, and completion refresh.
-5. Display task state, workflow node state, generation queue overview, and history in the frontend.
-6. Refresh running tasks/workflows through lightweight status APIs instead of high-frequency full-object polling.
-7. Save iterative generated images to the gallery and retrieve originals through controlled download APIs.
-8. Save business configuration overrides through `/settings` while avoiding secret values in API responses.
-9. Store uploaded/generated files in local storage and read them through controlled download APIs.
+5. Create products with full-canvas templates and insert built-in or user-saved node-group templates in the workbench.
+6. Display task state, workflow node state, generation queue overview, failure reasons, and history in the frontend.
+7. Refresh running tasks/workflows through lightweight status APIs instead of high-frequency full-object polling.
+8. Retry recoverable iterative image tasks and product workflow runs, and cancel running tasks.
+9. Save iterative generated images to the gallery and retrieve originals through controlled download APIs.
+10. Save business configuration overrides through `/settings` while avoiding secret values in API responses.
+11. Store uploaded/generated files in local storage and read them through controlled download APIs.
+12. Read in-product operation guidance and support boundaries at `/help`.
 
 ## 7. Explicit Boundaries
 

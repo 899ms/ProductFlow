@@ -17,8 +17,11 @@ Completed baseline capabilities:
 - Generated image gallery: iterative image results can be collected at `/gallery`, keeping source session, product, prompt, size, model, and download entrypoint.
 - Product DAG workflow editing, execution, persistent state, and recovery.
 - Shared top navigation.
-- ProductFlow workbench canvas interactions: mouse-wheel zoom, left-drag pan, node drag positioning, and edge drag creation/deletion.
-- Single-slot semantics for reference images, image drag-and-drop upload, compact right sidebar for Details / Runs / Images, and asset fill.
+- ProductFlow workbench canvas interactions: mouse-wheel zoom, left-drag pan, node drag positioning, box selection / multi-select, and edge drag creation/deletion.
+- Full-canvas templates for product creation: blank canvas, product main image, model/lifestyle image, usage scene image, and campaign/promotion image.
+- Workbench node-group templates: built-in groups can be inserted into existing canvases, and users can save selected nodes as their own node-group templates with rename and archive-delete support.
+- Single-slot semantics for reference images, image drag-and-drop upload, compact right sidebar for Details / Runs / Images / Templates, and asset fill.
+- In-product help page: `/help` covers quick start, canvas operations, templates, run failure handling, supported operations, and common questions.
 - Prompt configuration: product understanding, copy, workbench image generation, and iterative image-generation templates can be overridden in the settings page.
 - Initial product brand assets, README preview images, and Web favicon/metadata.
 - Settings page management for providers, models, upload limits, job retry, and other business configuration.
@@ -39,20 +42,20 @@ Completed baseline capabilities:
 
 - Expand end-to-end test examples for product workflow DAGs.
 - Add frontend component/interaction regression testing strategy.
-- Add more edge tests for provider mock, OpenAI Responses provider, and failure classification.
+- Add more edge tests for provider mock, OpenAI Responses provider, failure classification, and manual retry/cancel behavior.
 - Add independent tests for settings-page secret updates and non-echo behavior.
 
 ### 3. Workflow Experience
 
-- Improve DAG node run logs and failure reason display.
-- Add node-level retry, skip, and duplicate capabilities.
+- Continue improving DAG node run logs and failure reason display; categorized failure messages and workflow retry/cancel actions already exist.
+- Add node-level skip and duplicate capabilities; workflow-level retry/cancel already exists.
 - Continue optimizing partial loading and component boundaries on large product detail pages; active full-workflow polling has already been replaced with lightweight status polling.
 - Continue improving asset reuse between image sessions and product workflows, such as batch attach, version comparison, and clearer source labels.
-- Add automated regression tests for canvas zoom, drag, connection, and image fill.
+- Add more frontend regression coverage for the template panel, user-template saving, and key workbench component interactions; core canvas selection/drag helpers already have unit coverage.
 
 ### 4. Documentation and Productization
 
-- Add README / user-guide screenshots so ProductFlow workbench nodes and sidebar are more intuitive.
+- Add README / user-guide screenshots so ProductFlow workbench nodes, template panel, and sidebar are more intuitive.
 - Capture lightweight brand usage guidance, including recommended sizes and usage boundaries for logo, favicon, and README hero.
 - Add provider configuration examples and common-error troubleshooting instead of expanding dependency lists.
 

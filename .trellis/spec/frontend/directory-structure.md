@@ -65,6 +65,7 @@ Routes are centralized in `web/src/App.tsx` inside `AppRoutes()`:
 - `/products/:productId` -> `ProductDetailPage`
 - `/image-chat` -> standalone `ImageChatPage`
 - `/products/:productId/image-chat` -> product-scoped `ImageChatPage`
+- `/help` -> `HelpPage`
 - `/settings` -> `SettingsPage`
 
 Auth gating is also in `AppRoutes()`: it loads `api.getSessionState` with query key `['session']` and redirects

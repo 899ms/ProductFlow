@@ -42,7 +42,7 @@ The route layer only handles input adaptation, authentication, error mapping, an
 
 Frontend code lives under `web/src/`:
 
-- `pages/`: login, product list, product creation, product detail, gallery, settings, and image-session pages (current routes include `/image-chat`, `/products/:productId/image-chat`, `/gallery`, and `/settings`).
+- `pages/`: login, product list, product creation, product detail, gallery, help, settings, and image-session pages (current routes include `/image-chat`, `/products/:productId/image-chat`, `/gallery`, `/help`, and `/settings`).
 - `components/`: shared UI such as the top navigation, status tags, and image drag-and-drop upload area.
 - `lib/api.ts`: centralized REST API request wrapper.
 - `lib/types.ts`: frontend DTO types that must stay aligned with backend schemas.
@@ -54,7 +54,7 @@ The frontend uses TanStack Query for server state. The product detail page and i
 
 Do not reintroduce active polling for complete `ImageSessionDetailResponse` or complete `ProductWorkflowResponse`; those payloads include image history, node configuration, artifact references, and run records, and high-frequency refresh increases frontend render cost and backend serialization work.
 
-The product detail page is currently the ProductFlow workbench: the canvas handles nodes, edges, zoom, pan, and node dragging; the right sidebar handles Details, Runs, and Images. Canvas zoom ratio and sidebar width are browser-local preferences, while workflow nodes, edges, run state, and artifacts remain database-backed.
+The product detail page is currently the ProductFlow workbench: the canvas handles nodes, edges, zoom, pan, node dragging, box selection, and multi-select; the right sidebar handles Details, Runs, Images, and Templates. Canvas zoom ratio and sidebar width are browser-local preferences, while workflow nodes, edges, run state, and artifacts remain database-backed.
 
 ## 4. Main Data Model Lines
 
@@ -89,6 +89,16 @@ ProductWorkflow
   -> WorkflowNodeRun
 ```
 
+Canvas template chain:
+
+```text
+CanvasTemplate(builtin full_canvas/node_group)
+  -> product creation or workflow node group insertion
+
+UserCanvasTemplate(node_group)
+  -> reusable selected workflow nodes and internal edges
+```
+
 PostgreSQL is the source of truth for metadata and run state. Redis/Dramatiq is only responsible for dispatching background execution messages.
 
 Workflow node semantics for users:
@@ -97,6 +107,12 @@ Workflow node semantics for users:
 - `reference_image`: a single current reference image slot; manual upload or upstream image generation replaces the current image, while old assets remain in product history/assets.
 - `copy_generation`: copy generation and editable copy fields.
 - `image_generation`: image-generation trigger/configuration node; image artifacts are written into downstream reference image nodes instead of being displayed on the image-generation node itself.
+
+Canvas template boundaries:
+
+- `full_canvas` templates are only used to initialize a complete workflow during product creation.
+- `node_group` templates are only inserted into existing product workbenches and cannot contain `product_context` nodes.
+- User node-group templates are saved from selected nodes and persist only reusable configuration plus internal edges between selected nodes; they do not store product details, generated images, or copy outputs.
 
 ## 5. Async Jobs and Recovery
 
@@ -112,6 +128,8 @@ Shared principles:
 - If enqueue fails, the newly created run/task is marked failed to avoid stuck active state.
 - API startup recovers queued unfinished tasks/workflows.
 - Worker startup can reset stale running state and re-dispatch work.
+- Workflow runs and iterative image-generation tasks serialize `is_retryable` / `is_cancelable`, and the frontend uses those flags to show retry and cancel actions.
+- Image-generation failures are classified into user-readable categories covering provider quota/rate limit, content policy, network interruption, request timeout, provider service errors, and unsupported parameters.
 - Iterative image generation no longer treats a user-configurable hard total timeout as product semantics. Running tasks persist `progress_updated_at`, completed candidate count, current candidate, and provider response state; stale-running recovery uses the latest progress heartbeat for idle detection and only falls back to `started_at` for older rows.
 - The iterative image worker's Dramatiq `time_limit` remains only as an internal failsafe, not as a user-tunable generation deadline.
 - Dramatiq actors should no-op on duplicate messages for terminal/currently-running records.

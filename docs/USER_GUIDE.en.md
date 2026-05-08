@@ -7,9 +7,9 @@ This document has two parts:
 1. **Beginner tutorial**: minimal jargon, follow the clicks and fields, and generate one usable product image first.
 2. **Reference**: after completing one run, read more about workbench cards, prompt configuration, model settings, and common questions.
 
-ProductFlow no longer provides a top-navigation guide button, guide progress card, or separate beginner tutorial page. This document remains as text reference; follow the steps below manually to complete one full flow.
+The product now provides a **Help** page in the top navigation for quick access to workflows, templates, supported operations, and common troubleshooting. This Markdown document remains as repository text reference and should stay aligned with the in-product help page.
 
-The current workbench is the **ProductFlow workbench**: the middle area is a zoomable and draggable node canvas; the right side is a compact sidebar that switches between **Details / Runs / Images** with a small rail. Normal use does not require understanding the internal DAG. Just remember: product, reference image, copy, and image generation are cards; edges mean "downstream generation refers to upstream data".
+The current workbench is the **ProductFlow workbench**: the middle area is a zoomable and draggable node canvas; the right side is a compact sidebar that switches between **Details / Runs / Images / Templates** with a small rail. Normal use does not require understanding the internal DAG. Just remember: product, reference image, copy, and image generation are cards; edges mean "downstream generation refers to upstream data".
 
 ---
 
@@ -23,7 +23,8 @@ Goal: upload one product image, add a little information, generate copy, then ge
 2. Click **New product**.
 3. Upload a clear product main image.
 4. Fill in a product name, for example: `cream white commuter tote bag`.
-5. Click **Create and continue**.
+5. Choose a canvas template. Beginners can choose **Product main image**; choose **Blank canvas** if you want to build the workflow manually.
+6. Click **Create and continue**.
 
 Expected result: the page enters this product's workbench, with several clickable cards in the middle.
 
@@ -104,7 +105,18 @@ Download the image when you are satisfied. If you want to continue fine-tuning i
 - **Pan**: hold the left mouse button on blank canvas and drag to move the view. Dragging cards, clicking buttons, uploading, or dragging edges does not trigger canvas panning.
 - **Move cards**: hold the card body or title area and drag; the position is saved after release. It stays where you placed it after refresh.
 - **Connect cards**: drag from a card connection point to a target card. An edge is created after release. Edges are part of the workflow, not temporary visuals.
-- **Adjust sidebar**: the right sidebar handles Details, Runs, and Images. It stays compact and no longer uses a large bottom panel that occupies canvas space.
+- **Multi-select cards**: drag a selection box from blank canvas, or use multi-select operations to select several nodes. A selected group can be moved, deleted, or saved as a node-group template.
+- **Adjust sidebar**: the right sidebar handles Details, Runs, Images, and Templates. It stays compact and no longer uses a large bottom panel that occupies canvas space.
+
+### Node Group Templates
+
+The right-side **Templates** panel inserts reusable groups into an existing product workbench. It serves a different moment from the full-canvas template chosen during product creation:
+
+- **Full-canvas template**: chosen only when creating a product; it defines the initial workflow structure.
+- **Node-group template**: appended inside an existing product workbench, for example a main-image refinement, scene image, or campaign image flow.
+- **User template**: after selecting two or more non-product nodes, save the selected structure as your own node-group template.
+
+Saving a user template stores only reusable node configuration and internal edges between selected nodes. It does not store generated images, copy outputs, or product details. User templates can be renamed and deleted; deleting a template does not affect nodes already inserted into a product workbench.
 
 ### 7. Use Iterative Image Generation for Detail Tuning
 
@@ -167,6 +179,8 @@ The image-generation card now distinguishes between "generate directly from prod
 - Before running, confirm that the right-side form is saved. If the selected card has unsaved draft content, the current run button first attempts to save it, then starts running.
 - You can keep organizing canvas positions while the workflow is running, but do not repeatedly click run or change the structure.
 - Image-generation results are not downloaded from the image-generation card. Use the downstream reference image card or the right-side **Images** panel.
+- Running workflows can be cancelled from the Details or Runs area for the node involved. Failed retryable runs expose a retry action.
+- Failure messages try to distinguish provider quota/rate limit, content policy, network interruption, request timeout, provider service error, and unsupported parameters.
 
 ---
 
@@ -219,6 +233,8 @@ Copy, poster, workflow, and Image chat generation are background tasks. Pages re
 - Image chat updates queue position, completed candidate count, latest progress time, provider status, success/failure state, and failure reason.
 - Product workflows update node state, run state, and failure reasons.
 - After a task ends, the page refreshes full details and shows new images, copy, or product history.
+- Retryable failed tasks keep a retry entrypoint. Retry reuses the task's prompt, size, reference images, and advanced parameters.
+- Running Image chat tasks can be cancelled; cancelled tasks do not write new candidates.
 
 If a page does not change for a long time, check the running state and error message first, then refresh the page to confirm backend results.
 
@@ -237,6 +253,10 @@ It must connect to at least one downstream reference image card. The image-gener
 ### Image quality is poor. How should I change the prompt?
 
 Do not change many sentences at once. Change only one item per round: background, composition, lighting, or subject detail. This makes it easier to know which sentence improved the result.
+
+### Template saving failed?
+
+Confirm that you selected at least two nodes and did not include the **Product** node. User node-group templates store reusable workflow fragments. They cannot contain product-detail nodes and do not store generated images or copy outputs.
 
 ### Settings failed to save?
 
