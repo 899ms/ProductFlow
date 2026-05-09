@@ -7,6 +7,7 @@ import {
   sanitizeFilenamePart,
   toImageUrl,
 } from "../../lib/image-downloads";
+import { workflowNodeDisplayTitle } from "./nodeDisplay";
 import { outputStringArray } from "./utils";
 
 export function getSourceImageAsset(product: ProductDetail): SourceAsset | null {
@@ -76,7 +77,7 @@ export function getNodeImageDownload(
       )
       .find((item): item is SourceAsset => Boolean(item));
     return asset
-      ? buildSourceImageDownload(product, asset, node.title || "参考图")
+      ? buildSourceImageDownload(product, asset, workflowNodeDisplayTitle(node))
       : null;
   }
   return null;

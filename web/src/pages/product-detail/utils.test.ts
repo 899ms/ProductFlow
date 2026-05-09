@@ -122,10 +122,10 @@ describe("product-detail utils", () => {
   it("scopes visible image waiting state to image-generation and reference nodes", () => {
     expect(isImageWorkflowNodeWaiting({ ...baseNode, node_type: "reference_image", status: "queued" })).toBe(true);
     expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "reference_image", status: "running" })).toBe(
-      "参考图更新中",
+      "图片节点更新中",
     );
     expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "image_generation", status: "queued" })).toBe(
-      "生图排队中",
+      "图片排队生成",
     );
     expect(isImageWorkflowNodeWaiting({ ...baseNode, node_type: "copy_generation", status: "running" })).toBe(false);
     expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "reference_image", status: "succeeded" })).toBe("");
@@ -150,7 +150,7 @@ describe("product-detail utils", () => {
       expect(getWorkflowNodeRunActionState({ ...baseNode, id: `node-${status}`, status }, idleOptions)).toMatchObject({
         disabled: false,
         pending: false,
-        label: "运行",
+        label: status === "failed" ? "重试" : "运行",
       });
     }
 

@@ -62,6 +62,7 @@ import {
   replaceSelectedNodeIdsFromBox,
   toggleSelectedNodeId,
 } from "./product-detail/selection";
+import { connectionDescription } from "./product-detail/nodeDisplay";
 import type { NodeConfigDraft, SaveStatus } from "./product-detail/types";
 import {
   clamp,
@@ -117,6 +118,7 @@ export function ProductDetailPage() {
   );
   const [draftDirty, setDraftDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [notice, setNotice] = useState("");
   const [inspectorWidth, setInspectorWidth] = useState(() =>
     clamp(readStoredNumber("productflow.workflow.inspectorWidth", 360), MIN_INSPECTOR_WIDTH, MAX_INSPECTOR_WIDTH),
   );
@@ -727,22 +729,36 @@ export function ProductDetailPage() {
   });
 
   const createEdgeMutation = useMutation({
-    mutationFn: (input: { sourceNodeId: string; targetNodeId: string }) =>
-      api.createWorkflowEdge(productId, {
+    mutationFn: async (input: { sourceNodeId: string; targetNodeId: string }) => {
+      const currentWorkflow = queryClient.getQueryData<ProductWorkflow>(["product-workflow", productId]) ?? workflow;
+      const source = currentWorkflow?.nodes.find((node) => node.id === input.sourceNodeId);
+      const target = currentWorkflow?.nodes.find((node) => node.id === input.targetNodeId);
+      if (source?.node_type === "reference_image" && target?.node_type === "reference_image") {
+        throw new Error(connectionDescription(source, target));
+      }
+      const nextWorkflow = await api.createWorkflowEdge(productId, {
         source_node_id: input.sourceNodeId,
         target_node_id: input.targetNodeId,
         source_handle: "output",
         target_handle: "input",
-      }),
-    onSuccess: (nextWorkflow) => {
+      });
+      return { nextWorkflow, sourceNodeId: input.sourceNodeId, targetNodeId: input.targetNodeId };
+    },
+    onSuccess: ({ nextWorkflow, sourceNodeId, targetNodeId }) => {
+      const source = nextWorkflow.nodes.find((node) => node.id === sourceNodeId);
+      const target = nextWorkflow.nodes.find((node) => node.id === targetNodeId);
       setError("");
+      setNotice(source && target ? connectionDescription(source, target) : "");
       queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
       setSelectedNodeIds(clearSelectedNodeGroup(selectedNodeId));
     },
     onError: (mutationError) => {
+      setNotice("");
       setError(
         mutationError instanceof ApiError
           ? mutationError.detail
+          : mutationError instanceof Error
+            ? mutationError.message
           : "连接节点失败",
       );
     },
@@ -752,6 +768,7 @@ export function ProductDetailPage() {
     mutationFn: (edgeId: string) => api.deleteWorkflowEdge(edgeId),
     onSuccess: (nextWorkflow) => {
       setError("");
+      setNotice("");
       queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
       setSelectedNodeIds(clearSelectedNodeGroup(selectedNodeId));
     },
@@ -836,7 +853,7 @@ export function ProductDetailPage() {
   const uploadNodeImageMutation = useMutation({
     mutationFn: (file: File) => {
       if (!selectedNode) {
-        throw new Error("请选择参考图");
+        throw new Error("请选择图片节点");
       }
       return api.uploadWorkflowNodeImage(selectedNode.id, {
         file,
@@ -860,7 +877,7 @@ export function ProductDetailPage() {
   const bindNodeImageMutation = useMutation({
     mutationFn: (input: { source_asset_id?: string; poster_variant_id?: string }) => {
       if (!selectedNode || selectedNode.node_type !== "reference_image") {
-        throw new Error("请选择参考图节点");
+        throw new Error("请选择图片节点");
       }
       return api.bindWorkflowNodeImage(selectedNode.id, input);
     },
@@ -874,7 +891,7 @@ export function ProductDetailPage() {
       setError(
         mutationError instanceof ApiError
           ? mutationError.detail
-          : "填充参考图失败",
+          : "填充失败",
       );
     },
   });
@@ -1149,6 +1166,11 @@ export function ProductDetailPage() {
         {error ? (
           <div className="z-20 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
             <AlertCircle size={14} className="mr-2 inline" /> {error}
+          </div>
+        ) : null}
+        {!error && notice ? (
+          <div className="z-20 border-b border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-700">
+            <AlertCircle size={14} className="mr-2 inline" /> {notice}
           </div>
         ) : null}
         {showQueueOverview && queueOverview ? (

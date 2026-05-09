@@ -1,4 +1,5 @@
 import type { WorkflowNode, WorkflowNodeType } from "../../lib/types";
+import { workflowNodeTypeLabel } from "./nodeDisplay";
 
 export const NODE_WIDTH = 248;
 export const NODE_HANDLE_Y = 56;
@@ -11,10 +12,10 @@ export const CANVAS_NODE_PADDING_Y = 480;
 export const CANVAS_VIEWPORT_PADDING = 520;
 
 export const NODE_LABELS: Record<WorkflowNodeType, string> = {
-  product_context: "商品",
-  reference_image: "参考图",
-  copy_generation: "文案",
-  image_generation: "生图",
+  product_context: workflowNodeTypeLabel("product_context"),
+  reference_image: workflowNodeTypeLabel("reference_image"),
+  copy_generation: workflowNodeTypeLabel("copy_generation"),
+  image_generation: workflowNodeTypeLabel("image_generation"),
 };
 
 export const NODE_STATUS_LABELS: Record<WorkflowNode["status"], string> = {
@@ -26,9 +27,9 @@ export const NODE_STATUS_LABELS: Record<WorkflowNode["status"], string> = {
 };
 
 export const ADD_NODE_OPTIONS: Array<{ type: WorkflowNodeType; label: string }> = [
-  { type: "reference_image", label: "参考图" },
-  { type: "copy_generation", label: "文案" },
-  { type: "image_generation", label: "生图" },
+  { type: "reference_image", label: "图片节点" },
+  { type: "copy_generation", label: "商品文案" },
+  { type: "image_generation", label: "生成图片" },
 ];
 
 export const MIN_INSPECTOR_WIDTH = 280;

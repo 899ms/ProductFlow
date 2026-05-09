@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CopyPayloadV2, ProductDetail, WorkflowNode } from "../../lib/types";
-import { draftFromNode } from "./workflowConfig";
+import { defaultConfigForType, defaultTitleForType, draftFromNode } from "./workflowConfig";
 
 const structuredPayload: CopyPayloadV2 = {
   version: 2,
@@ -68,5 +68,12 @@ describe("draftFromNode", () => {
     expect("copySellingPoints" in draft).toBe(false);
     expect("copyPosterHeadline" in draft).toBe(false);
     expect("copyCta" in draft).toBe(false);
+  });
+
+  it("uses merchant-facing defaults for new nodes", () => {
+    expect(defaultConfigForType("reference_image")).toMatchObject({ role: "reference", label: "" });
+    expect(defaultTitleForType("reference_image", 1)).toBe("图片节点 1");
+    expect(defaultTitleForType("copy_generation", 1)).toBe("商品文案 1");
+    expect(defaultTitleForType("image_generation", 1)).toBe("生成图片 1");
   });
 });

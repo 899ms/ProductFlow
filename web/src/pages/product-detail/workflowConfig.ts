@@ -11,6 +11,7 @@ import {
   imageToolOptionsFromUnknown,
 } from "../../lib/imageToolOptions";
 import type { NodeConfigDraft } from "./types";
+import { defaultTitleForNodeType } from "./nodeDisplay";
 import { configString, outputText } from "./utils";
 
 function outputStructuredPayload(node: WorkflowNode | null): CopyPayloadV2 | null {
@@ -91,7 +92,7 @@ export function nodeConfigFromDraft(
 
 export function defaultConfigForType(type: WorkflowNodeType): Record<string, unknown> {
   if (type === "reference_image") {
-    return { role: "reference", label: "参考图" };
+    return { role: "reference", label: "" };
   }
   if (type === "copy_generation") {
     return {
@@ -113,10 +114,5 @@ export function defaultConfigForType(type: WorkflowNodeType): Record<string, unk
 }
 
 export function defaultTitleForType(type: WorkflowNodeType, index: number): string {
-  return {
-    product_context: `商品 ${index}`,
-    reference_image: `参考图 ${index}`,
-    copy_generation: `文案 ${index}`,
-    image_generation: `生图 ${index}`,
-  }[type];
+  return defaultTitleForNodeType(type, index);
 }

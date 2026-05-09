@@ -15,8 +15,8 @@ import type { WorkflowNode } from "../../lib/types";
 import { DownloadLink } from "./ImageDownloadComponents";
 import {
   IMAGE_PREVIEW_SURFACE_CLASS_NAME,
-  NODE_LABELS,
 } from "./constants";
+import { workflowNodeDisplayLabel, workflowNodeDisplayTitle } from "./nodeDisplay";
 import type { CanvasPoint } from "./types";
 import {
   type WorkflowNodeRunActionState,
@@ -78,6 +78,8 @@ export function WorkflowNodeCard({
     image_generation: ImageIcon,
   }[node.node_type];
   const Icon = icon;
+  const displayTitle = workflowNodeDisplayTitle(node);
+  const displayLabel = workflowNodeDisplayLabel(node);
   const imageWaiting = isImageWorkflowNodeWaiting(node);
   const waitingLabel = imageWorkflowNodeWaitingLabel(node);
   const selectedClassName = primarySelected
@@ -122,7 +124,7 @@ export function WorkflowNodeCard({
         onClick={onSelect}
         className="absolute left-[-9px] top-[47px] z-20 h-[18px] w-[18px] rounded-full border border-slate-300 bg-white shadow-sm hover:border-indigo-400 hover:ring-4 hover:ring-indigo-100"
         title="输入 handle"
-        aria-label={`${node.title} 输入 handle`}
+        aria-label={`${displayTitle} 输入 handle`}
       />
       <button
         type="button"
@@ -133,7 +135,7 @@ export function WorkflowNodeCard({
         onPointerCancel={onEndConnection}
         className="absolute right-[-10px] top-[46px] z-20 h-5 w-5 rounded-full border-2 border-indigo-500 bg-white shadow-sm hover:bg-indigo-50 hover:ring-4 hover:ring-indigo-100"
         title="拖拽连接输出"
-        aria-label={`${node.title} 输出 handle`}
+        aria-label={`${displayTitle} 输出 handle`}
       />
       <div onClick={onSelect} className="cursor-grab active:cursor-grabbing">
         <div className="mb-3 flex items-start justify-between gap-2">
@@ -143,10 +145,10 @@ export function WorkflowNodeCard({
             </span>
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-zinc-900">
-                {node.title}
+                {displayTitle}
               </div>
               <div className="mt-0.5 text-[10px] uppercase tracking-wider text-zinc-400">
-                {NODE_LABELS[node.node_type]}
+                {displayLabel}
               </div>
             </div>
           </div>
@@ -180,13 +182,16 @@ export function WorkflowNodeCard({
           </div>
         ) : null}
         {node.failure_reason ? (
-          <div className="line-clamp-2 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs leading-relaxed text-red-700">
-            {node.failure_reason}
+          <div className="rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs leading-relaxed text-red-700">
+            <div className="line-clamp-2">{node.failure_reason}</div>
+            {!runActionState.disabled ? (
+              <div className="mt-1 text-[10px] font-medium text-red-600">可重试</div>
+            ) : null}
           </div>
         ) : null}
       </div>
       <div className="mt-3 flex items-center justify-between text-[10px] text-zinc-400">
-        <span>{node.last_run_at ? `最近 ${formatDateTime(node.last_run_at)}` : NODE_LABELS[node.node_type]}</span>
+        <span>{node.last_run_at ? `最近 ${formatDateTime(node.last_run_at)}` : displayLabel}</span>
         {node.node_type !== "product_context" ? (
           <div className="flex items-center gap-1.5">
             <button
@@ -205,7 +210,7 @@ export function WorkflowNodeCard({
               disabled={runActionState.disabled}
               className="inline-flex items-center rounded border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-600 hover:border-zinc-900 hover:text-zinc-900 disabled:opacity-50"
               title={runActionState.title}
-              aria-label={`${node.title} ${runActionState.label}`}
+              aria-label={`${displayTitle} ${runActionState.label}`}
             >
               {runActionState.pending ? (
                 <Loader2 size={11} className="mr-1 animate-spin" />

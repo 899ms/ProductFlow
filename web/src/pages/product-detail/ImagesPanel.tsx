@@ -2,6 +2,7 @@ import type { DownloadableImage } from "../../lib/image-downloads";
 import type { PosterVariant, ProductDetail, SourceAsset, WorkflowNode } from "../../lib/types";
 
 import { PosterThumb, SourceAssetThumb } from "./ImageDownloadComponents";
+import { workflowNodeDisplayTitle } from "./nodeDisplay";
 
 interface ImagesPanelProps {
   product: ProductDetail;
@@ -29,16 +30,17 @@ export function ImagesPanel({
   fillReferenceBusy,
 }: ImagesPanelProps) {
   const canFillReference = Boolean(selectedReferenceNode);
+  const selectedReferenceLabel = selectedReferenceNode ? workflowNodeDisplayTitle(selectedReferenceNode) : "";
   return (
     <section>
       <div className="mb-3 space-y-1 text-xs text-zinc-500">
         <div>{artifactCount ? `可下载 ${artifactCount} 张` : "等待生成素材"}</div>
         {canFillReference ? (
           <div className="text-blue-600">
-            当前参考图：{selectedReferenceNode?.title || "参考图"}，可点击填充。
+            填入：{selectedReferenceLabel}
           </div>
         ) : (
-          <div>选择一个参考图节点后，可把图片填充到该节点。</div>
+          <div>先选图片节点。</div>
         )}
       </div>
       {artifactCount ? (

@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, Sparkles } from "lucide-react";
 
 import { formatDateTime } from "../../lib/format";
 import type { DownloadableImage } from "../../lib/image-downloads";
@@ -82,8 +82,9 @@ export function PosterThumb({
               }}
               disabled={useAsReferenceDisabled || useAsReferenceBusy}
               className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="填入当前图片节点"
             >
-              {useAsReferenceBusy ? "填充中" : "填充"}
+              {useAsReferenceBusy ? "填充中" : "填入"}
             </button>
           ) : null}
           <DownloadLink image={image} />
@@ -150,13 +151,20 @@ export function SourceAssetThumb({
               }}
               disabled={useAsReferenceDisabled || useAsReferenceBusy}
               className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="填入当前图片节点"
             >
-              {useAsReferenceBusy ? "填充中" : "填充"}
+              {useAsReferenceBusy ? "填充中" : "填入"}
             </button>
           ) : null}
           <DownloadLink image={image} />
         </div>
       </div>
+      {onUseAsReference ? (
+        <div className="flex items-center border-t border-zinc-100 px-2 py-1.5 text-[10px] leading-4 text-zinc-500">
+          <Sparkles size={11} className="mr-1 shrink-0 text-indigo-500" />
+          可作参考
+        </div>
+      ) : null}
     </div>
   );
 }

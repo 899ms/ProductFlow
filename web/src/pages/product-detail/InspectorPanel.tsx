@@ -10,6 +10,7 @@ import {
   OctagonX,
   Play,
   Plus,
+  Sparkles,
   Trash2,
   Upload,
   XCircle,
@@ -32,9 +33,10 @@ import type {
   ProductWorkflow,
   WorkflowNode,
 } from "../../lib/types";
-import { IMAGE_PREVIEW_SURFACE_CLASS_NAME, NODE_LABELS } from "./constants";
+import { IMAGE_PREVIEW_SURFACE_CLASS_NAME } from "./constants";
 import { DownloadLink } from "./ImageDownloadComponents";
 import { getNodeImageDownload } from "./imageDownloads";
+import { workflowNodeDisplayLabel, workflowNodeDisplayTitle } from "./nodeDisplay";
 import type { NodeConfigDraft, SaveStatus } from "./types";
 import { type WorkflowNodeRunActionState, outputText, statusClass, workflowNodeStatusLabel } from "./utils";
 import { TextArea } from "./TextArea";
@@ -105,6 +107,8 @@ export function InspectorPanel({
     image_generation: ImageIcon,
   }[node.node_type];
   const InspectorIcon = icon;
+  const displayTitle = workflowNodeDisplayTitle({ ...node, title: draft.title || node.title });
+  const displayLabel = workflowNodeDisplayLabel(node);
   const downstreamReferenceCount =
     node.node_type === "image_generation"
       ? new Set(
@@ -137,11 +141,11 @@ export function InspectorPanel({
           </span>
           <div className="min-w-0 flex-1">
             <div className="truncate text-base font-semibold text-zinc-950">
-              {draft.title || node.title}
+              {displayTitle}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
-                {NODE_LABELS[node.node_type]}
+                {displayLabel}
               </span>
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClass(node.status)}`}
@@ -246,6 +250,15 @@ export function InspectorPanel({
             className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
           />
         </label>
+        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+          {node.node_type === "image_generation"
+            ? "生成结果写入下游图片节点。"
+            : node.node_type === "reference_image"
+              ? "可上传，也可接收生成结果。"
+              : node.node_type === "copy_generation"
+                ? "读取商品资料和图片参考。"
+                : "提供商品基础信息。"}
+        </div>
 
         {node.node_type === "product_context" ? (
           <ProductContextInspector
@@ -290,6 +303,9 @@ export function InspectorPanel({
         <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs leading-relaxed text-red-700 shadow-sm">
           <AlertCircle size={13} className="mr-1.5 inline" />
           {node.failure_reason}
+          {!runActionState.disabled && node.node_type !== "product_context" ? (
+            <div className="mt-2 font-semibold text-red-700">当前节点可重试。</div>
+          ) : null}
         </section>
       ) : null}
       {promptPreview ? (
@@ -415,6 +431,10 @@ function ReferenceImageInspector({
             </span>
           </button>
           <DownloadLink image={image} variant="overlay" />
+          <div className="absolute left-2 top-2 inline-flex items-center rounded-md bg-white/95 px-2 py-1 text-[10px] font-medium text-indigo-700 shadow-sm ring-1 ring-indigo-100">
+            <Sparkles size={11} className="mr-1" />
+            可作参考
+          </div>
         </div>
       ) : null}
       <label className="block">
@@ -442,7 +462,14 @@ function ReferenceImageInspector({
         >
           <option value="reference">参考图</option>
           <option value="style">风格图</option>
-          <option value="product_angle">商品角度</option>
+          <option value="product_angle">商品角度图</option>
+          <option value="main_image">主图</option>
+          <option value="sku_image">SKU 图</option>
+          <option value="model_image">模特图</option>
+          <option value="scene_image">场景图</option>
+          <option value="detail_image">详情图</option>
+          <option value="campaign_image">活动图</option>
+          <option value="background">背景图</option>
         </select>
       </label>
       <ImageDropZone
@@ -840,7 +867,7 @@ function ImageGenerationInspector({
     <div className="space-y-3">
       {downstreamReferenceCount === 0 ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-          请先连接一个参考图节点，生成结果会写入该节点。
+          先连接图片节点。
         </div>
       ) : null}
       <ImageGenerationSettingsTabs
@@ -853,7 +880,7 @@ function ImageGenerationInspector({
                 <div>
                   <div className="text-xs font-semibold text-slate-700">生成数量</div>
                   <div className="mt-1 text-[11px] leading-5 text-slate-500">
-                    由下游参考图节点决定；当前会生成 {downstreamReferenceCount} 张。
+                    下游图片节点：{downstreamReferenceCount} 张
                   </div>
                 </div>
                 <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">

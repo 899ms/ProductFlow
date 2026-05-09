@@ -6,6 +6,7 @@ import type {
   WorkflowRun,
 } from "../../lib/types";
 import { NODE_STATUS_LABELS } from "./constants";
+import { workflowNodeDisplayTitle } from "./nodeDisplay";
 
 export interface WorkflowNodeRunActionState {
   disabled: boolean;
@@ -79,9 +80,10 @@ export function imageWorkflowNodeWaitingLabel(node: WorkflowNode): string {
     return "";
   }
   if (node.node_type === "reference_image") {
-    return node.status === "queued" ? "参考图排队更新" : "参考图更新中";
+    const slotLabel = workflowNodeDisplayTitle(node);
+    return node.status === "queued" ? `${slotLabel}排队更新` : `${slotLabel}更新中`;
   }
-  return node.status === "queued" ? "生图排队中" : "生图生成中";
+  return node.status === "queued" ? "图片排队生成" : "图片生成中";
 }
 
 export function getWorkflowNodeRunActionState(
@@ -122,8 +124,8 @@ export function getWorkflowNodeRunActionState(
   return {
     disabled: false,
     pending: false,
-    label: "运行",
-    title: "运行节点",
+    label: node.status === "failed" ? "重试" : "运行",
+    title: node.status === "failed" ? "重新运行该节点" : "运行节点",
   };
 }
 
