@@ -76,10 +76,7 @@ def test_workflow_image_generation_uses_injected_renderer_factory() -> None:
     generated = _generate_workflow_images_concurrently(
         render_input=PosterGenerationInput(
             product_name="渲染注入测试",
-            title="测试标题",
-            selling_points=["卖点一", "卖点二", "卖点三"],
-            poster_headline="测试主标题",
-            cta="立即测试",
+            structured_copy_context="摘要：测试主标题\n卖点：卖点一\n卖点：卖点二\n卖点：卖点三",
             source_image=source_path,
         ),
         kind=PosterKind.MAIN_IMAGE,

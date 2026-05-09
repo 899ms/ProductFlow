@@ -4,13 +4,10 @@ from typing import Any
 
 from productflow_backend.application.contracts import (
     BlocksCopyContent,
-    CopyBlock,
     CopyNodeConfigV2,
-    CopyPayload,
     CopyPayloadV2,
     FreeformCopyContent,
     LayoutBriefCopyContent,
-    LegacyCopyFields,
 )
 from productflow_backend.infrastructure.db.models import CopySet
 
@@ -38,74 +35,17 @@ def normalize_copy_payload(raw_payload: Any, *, fallback_purpose: str | None = N
     if not isinstance(raw_payload, dict):
         raise ValueError("文案模型输出必须是 JSON 对象")
     if raw_payload.get("version") == 2 or "content" in raw_payload:
-        return CopyPayloadV2.model_validate(_normalize_v2_payload_dict(raw_payload))
-    legacy = CopyPayload.model_validate(raw_payload)
-    return legacy_copy_fields_to_payload(
-        LegacyCopyFields(
-            title=legacy.title,
-            selling_points=legacy.selling_points,
-            poster_headline=legacy.poster_headline,
-            cta=legacy.cta,
-        ),
-        purpose=fallback_purpose,
-    )
-
-
-def legacy_copy_fields_to_payload(fields: LegacyCopyFields, *, purpose: str | None = None) -> CopyPayloadV2:
-    blocks = [
-        CopyBlock(id="title", role="headline", label="标题", text=fields.title),
-        *[
-            CopyBlock(
-                id=f"selling-point-{index}",
-                role="selling_point",
-                label=f"卖点 {index}",
-                text=point,
-                priority=index,
-            )
-            for index, point in enumerate(fields.selling_points, start=1)
-            if point.strip()
-        ],
-    ]
-    if fields.poster_headline.strip() and fields.poster_headline.strip() != fields.title.strip():
-        blocks.append(CopyBlock(id="poster-headline", role="headline", label="海报标题", text=fields.poster_headline))
-    if fields.cta.strip():
-        blocks.append(CopyBlock(id="cta", role="cta", label="CTA", text=fields.cta))
-    return CopyPayloadV2(
-        purpose=purpose,
-        summary=fields.poster_headline or fields.title or fields.selling_points[0],
-        content=BlocksCopyContent(blocks=blocks),
-        derived=fields,
-    )
+        payload = _normalize_v2_payload_dict(raw_payload)
+        if fallback_purpose and not payload.get("purpose"):
+            payload["purpose"] = fallback_purpose
+        return CopyPayloadV2.model_validate(payload)
+    raise ValueError("文案模型输出必须符合 CopyPayloadV2 合同")
 
 
 def copy_set_structured_payload(copy_set: CopySet) -> CopyPayloadV2:
     if isinstance(copy_set.structured_payload, dict):
         return normalize_copy_payload(copy_set.structured_payload)
-    return legacy_copy_fields_to_payload(
-        LegacyCopyFields(
-            title=copy_set.title,
-            selling_points=copy_set.selling_points or [],
-            poster_headline=copy_set.poster_headline,
-            cta=copy_set.cta,
-        )
-    )
-
-
-def copy_payload_to_legacy_fields(payload: CopyPayloadV2) -> LegacyCopyFields:
-    if payload.derived is not None:
-        return _complete_legacy_fields(payload.derived, payload)
-    texts = _payload_texts(payload)
-    title = texts[0] if texts else payload.summary
-    points = texts[1:4]
-    while len(points) < 3:
-        points.append(payload.summary)
-    poster_headline = payload.visual_guidance.main_message if payload.visual_guidance else None
-    return LegacyCopyFields(
-        title=title[:500],
-        selling_points=[point[:500] for point in points[:5]],
-        poster_headline=(poster_headline or title or payload.summary)[:500],
-        cta=_first_role_text(payload, "cta")[:300],
-    )
+    raise ValueError("文案版本缺少 structured_payload")
 
 
 def copy_payload_context_text(payload: CopyPayloadV2) -> str:
@@ -145,14 +85,9 @@ def copy_payload_context_text(payload: CopyPayloadV2) -> str:
     return "\n".join(part for part in parts if part.strip())
 
 
-def copy_payload_to_output(payload: CopyPayloadV2, legacy: LegacyCopyFields) -> dict[str, Any]:
+def copy_payload_to_output(payload: CopyPayloadV2) -> dict[str, Any]:
     return {
         "structured_payload": payload.model_dump(mode="json"),
-        "derived_fields": legacy.model_dump(mode="json"),
-        "title": legacy.title,
-        "poster_headline": legacy.poster_headline,
-        "selling_points": legacy.selling_points,
-        "cta": legacy.cta,
         "summary": f"文案：{payload.summary}",
     }
 
@@ -369,47 +304,6 @@ def _slug_id(value: Any, *, fallback_id: str, index: int) -> str:
 
 def _humanize_key(value: str) -> str:
     return value.replace("_", " ").replace("-", " ").strip() or "分区"
-
-
-def _complete_legacy_fields(fields: LegacyCopyFields, payload: CopyPayloadV2) -> LegacyCopyFields:
-    generated = LegacyCopyFields()
-    if not fields.title or not fields.poster_headline or len(fields.selling_points) < 3:
-        generated = copy_payload_to_legacy_fields(payload.model_copy(update={"derived": None}))
-    title = fields.title or generated.title or payload.summary
-    selling_points = [point for point in fields.selling_points if point.strip()] or generated.selling_points
-    while len(selling_points) < 3:
-        selling_points.append(payload.summary)
-    return LegacyCopyFields(
-        title=title[:500],
-        selling_points=[point[:500] for point in selling_points[:5]],
-        poster_headline=(fields.poster_headline or generated.poster_headline or title)[:500],
-        cta=(fields.cta or generated.cta)[:300],
-    )
-
-
-def _payload_texts(payload: CopyPayloadV2) -> list[str]:
-    if isinstance(payload.content, FreeformCopyContent):
-        return [payload.content.text]
-    if isinstance(payload.content, BlocksCopyContent):
-        return [block.text for block in sorted(payload.content.blocks, key=lambda item: item.priority or 999)]
-    texts: list[str] = []
-    for section in payload.content.sections:
-        texts.extend(part for part in (section.title, section.body) if part)
-        texts.extend(item.text for item in section.items)
-    return [text for text in texts if text.strip()]
-
-
-def _first_role_text(payload: CopyPayloadV2, role: str) -> str:
-    if isinstance(payload.content, BlocksCopyContent):
-        for block in payload.content.blocks:
-            if block.role == role:
-                return block.text
-    if isinstance(payload.content, LayoutBriefCopyContent):
-        for section in payload.content.sections:
-            for item in section.items:
-                if item.role == role:
-                    return item.text
-    return ""
 
 
 def _infer_output_mode(instruction: str) -> str:

@@ -6,7 +6,6 @@ from productflow_backend.application.contracts import (
     CopyNodeConfigV2,
     CopyPayloadV2,
     CreativeBriefPayload,
-    LegacyCopyFields,
     ProductInput,
     ReferenceImageInput,
     VisualGuidance,
@@ -85,12 +84,6 @@ class MockTextProvider(TextProvider):
                 composition_hint=brief.poster_style_hint,
                 text_density="medium",
                 avoid=brief.taboo_phrases,
-            ),
-            derived=LegacyCopyFields(
-                title=title,
-                selling_points=points,
-                poster_headline=f"{product.name} 重点速看",
-                cta="",
             ),
         )
         return copy, "mock-copy-v2"

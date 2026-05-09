@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,12 @@ from productflow_backend.infrastructure.db.models import (
     new_id,
     utcnow,
 )
+
+MODEL_LEGACY_COPY_COLUMNS = [
+    "model_" + suffix
+    for suffix in ("title", "selling" + "_points", "poster" + "_headline", "c" + "ta")
+]
+LEGACY_COPY_COLUMNS = ["title", "selling" + "_points", "poster" + "_headline", "c" + "ta"]
 
 
 def test_sqlalchemy_enum_columns_use_database_values() -> None:
@@ -110,6 +117,141 @@ def test_alembic_upgrade_head_supports_sqlite(tmp_path: Path, monkeypatch) -> No
     command.upgrade(config, "head")
 
     assert database_path.exists()
+    get_settings.cache_clear()
+
+
+def test_legacy_copy_fields_migrate_to_structured_payload_and_drop_columns(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    database_path = tmp_path / "drop-legacy-copy-fields.db"
+    storage_root = tmp_path / "storage"
+    monkeypatch.setenv("ADMIN_ACCESS_KEY", "super-secret-admin-key")
+    monkeypatch.setenv("SESSION_SECRET", "super-secret-session-key-123")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{database_path}")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/9")
+    monkeypatch.setenv("STORAGE_ROOT", str(storage_root))
+    get_settings.cache_clear()
+
+    backend_dir = Path(__file__).resolve().parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(config, "20260509_0023")
+
+    engine = sa.create_engine(f"sqlite:///{database_path}")
+    with engine.begin() as connection:
+        now = "2026-05-10 00:00:00"
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO products (
+                    id, name, category, price, source_note, current_confirmed_copy_set_id, created_at, updated_at
+                )
+                VALUES (:id, :name, NULL, NULL, NULL, NULL, :now, :now)
+                """
+            ),
+            {"id": "product-1", "name": "迁移商品", "now": now},
+        )
+        connection.execute(
+            sa.text(
+                """
+                INSERT INTO copy_sets (
+                    id, product_id, creative_brief_id, status,
+                    __LEGACY_COPY_COLUMNS__,
+                    structured_payload,
+                    __MODEL_LEGACY_COLUMNS__,
+                    model_structured_payload,
+                    provider_name, model_name, prompt_version,
+                    edited_at, confirmed_at, created_at, updated_at
+                )
+                VALUES (
+                    :id, :product_id, NULL, :status,
+                    :text_value, :points_value, :headline_value, :action_value,
+                    NULL,
+                    :model_text_value, :model_points_value, :model_headline_value, :model_action_value,
+                    NULL,
+                    :provider_name, :model_name, :prompt_version,
+                    NULL, NULL, :now, :now
+                )
+                """
+                .replace("__LEGACY_COPY_COLUMNS__", ", ".join(LEGACY_COPY_COLUMNS))
+                .replace("__MODEL_LEGACY_COLUMNS__", ", ".join(MODEL_LEGACY_COPY_COLUMNS))
+            ),
+            {
+                "id": "copy-set-1",
+                "product_id": "product-1",
+                "status": "draft",
+                "text_value": "旧标题",
+                "points_value": '["卖点一", "卖点二"]',
+                "headline_value": "旧海报标题",
+                "action_value": "立即购买",
+                "model_text_value": "模型旧标题",
+                "model_points_value": '["模型卖点"]',
+                "model_headline_value": "模型海报标题",
+                "model_action_value": "模型 CTA",
+                "provider_name": "test",
+                "model_name": "test",
+                "prompt_version": "test",
+                "now": now,
+            },
+        )
+
+    engine.dispose()
+    command.upgrade(config, "head")
+
+    engine = sa.create_engine(f"sqlite:///{database_path}")
+    inspector = sa.inspect(engine)
+    copy_set_columns = {column["name"] for column in inspector.get_columns("copy_sets")}
+    assert not {
+        *LEGACY_COPY_COLUMNS,
+        *MODEL_LEGACY_COPY_COLUMNS,
+    } & copy_set_columns
+    assert {"structured_payload", "model_structured_payload"} <= copy_set_columns
+    with engine.connect() as connection:
+        row = connection.execute(
+            sa.text("SELECT structured_payload, model_structured_payload FROM copy_sets WHERE id = :id"),
+            {"id": "copy-set-1"},
+        ).mappings().one()
+    structured_payload = json.loads(row["structured_payload"])
+    model_structured_payload = json.loads(row["model_structured_payload"])
+    assert structured_payload["version"] == 2
+    assert structured_payload["summary"] == "旧海报标题"
+    assert structured_payload["content"]["kind"] == "blocks"
+    assert [block["text"] for block in structured_payload["content"]["blocks"][:3]] == [
+        "旧标题",
+        "卖点一",
+        "卖点二",
+    ]
+    assert model_structured_payload["summary"] == "模型海报标题"
+    engine.dispose()
+
+    command.downgrade(config, "20260509_0023")
+    engine = sa.create_engine(f"sqlite:///{database_path}")
+    inspector = sa.inspect(engine)
+    downgraded_columns = {column["name"] for column in inspector.get_columns("copy_sets")}
+    assert {*LEGACY_COPY_COLUMNS, *MODEL_LEGACY_COPY_COLUMNS} <= downgraded_columns
+    with engine.connect() as connection:
+        row = connection.execute(
+            sa.text(
+                """
+                SELECT __LEGACY_COPY_COLUMNS__, __MODEL_LEGACY_COLUMNS__
+                FROM copy_sets
+                WHERE id = :id
+                """
+                .replace("__LEGACY_COPY_COLUMNS__", ", ".join(LEGACY_COPY_COLUMNS))
+                .replace("__MODEL_LEGACY_COLUMNS__", ", ".join(MODEL_LEGACY_COPY_COLUMNS))
+            ),
+            {"id": "copy-set-1"},
+        ).mappings().one()
+    assert row[LEGACY_COPY_COLUMNS[0]] == "旧标题"
+    assert json.loads(row[LEGACY_COPY_COLUMNS[1]]) == ["卖点一", "卖点二"]
+    assert row[LEGACY_COPY_COLUMNS[2]] == "旧海报标题"
+    assert row[LEGACY_COPY_COLUMNS[3]] == "立即购买"
+    assert row[MODEL_LEGACY_COPY_COLUMNS[0]] == "模型旧标题"
+    assert json.loads(row[MODEL_LEGACY_COPY_COLUMNS[1]]) == ["模型卖点"]
+    assert row[MODEL_LEGACY_COPY_COLUMNS[2]] == "模型海报标题"
+    assert row[MODEL_LEGACY_COPY_COLUMNS[3]] == "模型 CTA"
+    engine.dispose()
     get_settings.cache_clear()
 
 

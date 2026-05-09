@@ -203,10 +203,6 @@ def update_workflow_copy_set_endpoint(
         workflow = update_workflow_copy_set(
             session,
             node_id=node_id,
-            title=payload.title,
-            selling_points=payload.selling_points,
-            poster_headline=payload.poster_headline,
-            cta=payload.cta,
             structured_payload=payload.structured_payload,
         )
     except ValueError as exc:

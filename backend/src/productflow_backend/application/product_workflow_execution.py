@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,7 +18,7 @@ from productflow_backend.application import product_workflow_graph
 from productflow_backend.application.admission import ensure_generation_capacity, generation_running_capacity_available
 from productflow_backend.application.contracts import PosterGenerationInput, ProductInput
 from productflow_backend.application.copy_payloads import (
-    copy_payload_to_legacy_fields,
+    copy_payload_context_text,
     normalize_copy_node_config,
     normalize_copy_payload,
 )
@@ -872,21 +871,13 @@ def _execute_copy_generation(
         config=config,
         reference_images=reference_images,
     )
-    legacy_copy = copy_payload_to_legacy_fields(copy_payload)
+    structured_payload = copy_payload.model_dump(mode="json")
     copy_set = CopySet(
         product_id=product.id,
         creative_brief_id=brief.id,
         status=CopyStatus.DRAFT,
-        title=legacy_copy.title,
-        selling_points=legacy_copy.selling_points,
-        poster_headline=legacy_copy.poster_headline,
-        cta=legacy_copy.cta,
-        structured_payload=copy_payload.model_dump(mode="json"),
-        model_title=legacy_copy.title,
-        model_selling_points=legacy_copy.selling_points,
-        model_poster_headline=legacy_copy.poster_headline,
-        model_cta=legacy_copy.cta,
-        model_structured_payload=copy_payload.model_dump(mode="json"),
+        structured_payload=structured_payload,
+        model_structured_payload=structured_payload,
         provider_name=provider.provider_name,
         model_name=copy_model,
         prompt_version=provider.prompt_version,
@@ -913,21 +904,13 @@ def _generate_copy_with_provider(
     config: Any,
     reference_images: list[Any],
 ) -> tuple[Any, str]:
-    signature = inspect.signature(provider.generate_copy)
-    if "config" in signature.parameters:
-        return provider.generate_copy(
-            product_input,
-            brief_payload,
-            config=config,
-            reference_images=reference_images,
-        )
-    legacy_payload, model_name = provider.generate_copy(
+    copy_payload, model_name = provider.generate_copy(
         product_input,
         brief_payload,
-        instruction=config.instruction,
+        config=config,
         reference_images=reference_images,
     )
-    return normalize_copy_payload(legacy_payload.model_dump(), fallback_purpose=config.purpose), model_name
+    return normalize_copy_payload(copy_payload.model_dump(mode="json"), fallback_purpose=config.purpose), model_name
 
 
 def _execute_image_generation(
@@ -952,6 +935,12 @@ def _execute_image_generation(
     )
     if copy_set is None or copy_set.product_id != product.id:
         copy_set = create_context_copy_set(session, product=product, product_context=product_context, node=node)
+    structured_copy_context = None
+    if isinstance(copy_set.structured_payload, dict):
+        try:
+            structured_copy_context = copy_payload_context_text(normalize_copy_payload(copy_set.structured_payload))
+        except ValueError:
+            structured_copy_context = None
 
     storage = LocalStorage()
     reference_assets = reference_assets_for_image_generation(
@@ -973,10 +962,7 @@ def _execute_image_generation(
         instruction=image_instruction_with_context(node, incoming_context.text_contexts),
         image_size=image_size_from_config(node.config_json),
         tool_options=image_tool_options_from_config(node.config_json),
-        title=copy_set.title,
-        selling_points=copy_set.selling_points,
-        poster_headline=copy_set.poster_headline,
-        cta=copy_set.cta,
+        structured_copy_context=structured_copy_context,
         source_image=reference_payload.source_image,
         reference_images=reference_payload.reference_images,
     )

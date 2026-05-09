@@ -337,16 +337,7 @@ class CopySet(Base, TimestampMixin):
     )
     status: Mapped[CopyStatus] = mapped_column(enum_value_column(CopyStatus), default=CopyStatus.DRAFT)
 
-    title: Mapped[str] = mapped_column(Text)
-    selling_points: Mapped[list[str]] = mapped_column(JSON)
-    poster_headline: Mapped[str] = mapped_column(Text)
-    cta: Mapped[str] = mapped_column(Text)
     structured_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-
-    model_title: Mapped[str] = mapped_column(Text)
-    model_selling_points: Mapped[list[str]] = mapped_column(JSON)
-    model_poster_headline: Mapped[str] = mapped_column(Text)
-    model_cta: Mapped[str] = mapped_column(Text)
     model_structured_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     provider_name: Mapped[str] = mapped_column(String(50))

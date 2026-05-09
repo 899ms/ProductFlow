@@ -54,7 +54,7 @@
 
 如果不满意：只改一个方向再试，例如“更年轻一点”“更简洁一点”“少一点夸张词”。
 
-文案详情里只会直接显示已有内容。空的可选字段会收起成“添加标签”“添加视觉建议”等按钮；长文本输入框会随内容自动增高。标题、卖点、海报标题和按钮文案仍会显示在派生字段区，但它们只是兼容旧渲染入口的结果，不是必须逐项填写的主编辑字段。
+文案详情里只会直接显示已有内容。空的可选字段会收起成“添加标签”“添加视觉建议”等按钮；长文本输入框会随内容自动增高。后续生图会读取这份结构化文案，不要求每次都填出标题、卖点、海报标题和按钮文案。
 
 ### 4. 添加或连接参考图
 
@@ -166,7 +166,7 @@
 
 生成可编辑的结构化文案。文案可以是自由正文、文案块或布局分区，并可附带视觉建议。生成后可以在卡片里继续编辑，编辑后的结构化文案会被后续生图使用。
 
-旧的标题、卖点、海报主标题和按钮文案会从结构化文案中派生出来，用于兼容旧海报渲染和历史数据；不要为了填满这些字段而编造不需要的 CTA 或卖点。
+历史记录里可能仍有标题、卖点、海报主标题和按钮文案；当前工作台会把结构化文案作为后续生图上下文，不需要为了固定字段编造不需要的 CTA 或卖点。
 
 ### 生图
 
@@ -210,8 +210,8 @@
 
 常用占位符：
 
-- 工作台海报/图片生成模板：`product_name`、`category`、`price`、`source_note`、`instruction`、`title`、`selling_points`、`poster_headline`、`cta`、`context_block`、`reference_policy`、`size`、`kind`、`kind_label`、`kind_requirements`。
-- 工作台改图模板：`product_name`、`category`、`price`、`source_note`、`instruction`、`title`、`selling_points`、`poster_headline`、`cta`、`context_block`、`reference_policy`、`size`、`kind`、`kind_label`、`kind_requirements`。
+- 工作台海报/图片生成模板：`product_name`、`category`、`price`、`source_note`、`instruction`、`context_block`、`reference_policy`、`size`、`kind`、`kind_label`、`kind_requirements`。
+- 工作台改图模板：`product_name`、`category`、`price`、`source_note`、`instruction`、`context_block`、`reference_policy`、`size`、`kind`、`kind_label`、`kind_requirements`。
 - 文/图生图模板：`prompt`、`size`、`history_block`。
 
 如果占位符写错，系统不会因为未知占位符直接崩掉，但那一段可能不会按预期替换。建议小幅修改后测试。

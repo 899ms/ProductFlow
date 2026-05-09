@@ -120,10 +120,10 @@
 - Type-specific inspector forms are required for product context, reference image, copy generation, and image generation;
   avoid generic JSON editors for normal user flows.
 - A selected `copy_generation` node with a generated `copy_set_id` must edit `CopyPayloadV2` as the primary copy model:
-  `summary`, `content.kind`, block/section text, labels, notes, and visual hints. Title, selling points, poster headline,
-  and CTA are derived compatibility fields only; they may be shown as a compact read-only derived-field area, but they
-  must not be the main editor or a parallel editing path. Saving calls `updateWorkflowNodeCopy(...)` with
-  `structured_payload`, refreshes workflow/product artifacts, and does not expose the raw `copy_set_id`.
+  `summary`, `content.kind`, block/section text, labels, notes, and visual hints. The inspector must not show a derived
+  fixed-field copy panel or maintain removed copy fields as draft state. Saving calls
+  `updateWorkflowNodeCopy(...)` with `structured_payload`, refreshes workflow/product artifacts, and does not expose the
+  raw `copy_set_id`.
 - Node output details should stay productized and minimal. Do not render raw `output_json` keys, artifact IDs, prompt /
   instruction text, generated-summary prose, or technical fact-chip piles in the normal inspector; keep failure reasons
   visible and expose successful artifacts through their productized surfaces (node thumbnails, editable copy fields, and

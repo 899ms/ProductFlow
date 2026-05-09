@@ -503,17 +503,15 @@ returns the normal `ProductWorkflow`.
   role/label metadata to the text provider. Text-only providers should include concise reference metadata in the prompt;
   multimodal-capable providers may also attach image payloads/paths.
 - A generated `copy_generation` output is editable through `PATCH /api/workflow-nodes/{node_id}/copy`. The endpoint
-  updates the underlying `CopySet.structured_payload`, derives legacy title/selling-points/headline/CTA fields for old
-  prompt variables and poster rendering, then rewrites the node output so downstream image nodes read the edited v2 copy
-  through the existing `copy_set_id`.
+  updates the underlying `CopySet.structured_payload`, then rewrites the node output so downstream image nodes read the
+  edited v2 copy through the existing `copy_set_id`. Structured-payload edits must not re-derive or overwrite
+  removed fixed-field copy columns.
 - Manually edited copy node outputs should be treated as the selected copy for downstream runs. Re-running a downstream
   image node must not silently replace that edited `CopySet` with a fresh generated copy before image generation.
-- New copy-generation runs must produce `CopyPayloadV2` as the only main path. Legacy four-field payloads are accepted only
-  by the normalization adapter for historical rows and older tests; do not add new provider, template, or editor code that
-  treats `title/selling_points/poster_headline/cta` as the primary copy contract.
-- Copy-node output JSON must include `structured_payload` and `derived_fields` alongside compatibility fields. Upstream
-  image context should use `structured_payload.summary/content/visual_guidance` when present, while older prompt variables
-  continue to read derived title/selling-points/headline/CTA.
+- New copy-generation runs must produce `CopyPayloadV2` as the only path. Providers, templates, editors, and tests must
+  treat `structured_payload` as the copy contract.
+- Copy-node output JSON must include `structured_payload` and must not emit fixed copy fields for workflow runs. Upstream
+  image context must use `structured_payload.summary/content/visual_guidance`.
 - `image_generation` nodes collect incoming edge context, including upstream copy text and reference-image outputs. They
   are trigger/config nodes, not image-bearing artifact slots; generated images must be viewed/downloaded from linked
   downstream `reference_image` nodes or normal product artifact history, not from the `image_generation` node card.
@@ -522,12 +520,13 @@ returns the normal `ProductWorkflow`.
   image as the primary visual subject when present, while upstream copy is auxiliary selling-point/layout context. This is
   important when product text is weak such as a default name `商品` and copy generation may otherwise invent an unrelated
   role, IP, brand, or ad theme.
-- Image prompt mode is determined by explicit copy linkage, not by whether a fallback `CopySet` exists for persistence.
+- Image prompt mode is determined by explicit copy linkage, not by whether a workflow-local `CopySet` exists for
+  persistence.
   If `image_generation.config_json.copy_set_id` or an upstream `copy_generation.output_json.copy_set_id` points to a
   same-product `CopySet`, provider input must set `PosterGenerationInput.copy_prompt_mode = "copy"` and use the poster/copy
   image template. If no explicit copy link exists, create the workflow-local draft `CopySet` as needed for
   `PosterVariant.copy_set_id`, but set `copy_prompt_mode = "image_edit"` so provider prompts use the no-copy image-edit
-  template and do not require title/selling-points/headline/CTA semantics.
+  template and do not require fixed copy-field semantics.
 - A connected upstream `product_context` node contributes the product source image asset and product fields to
   `image_generation` image context. For image-generation context only, "upstream" includes direct edges and transitive
   ancestors such as `product_context -> copy_generation -> image_generation`; this preserves product context for older or
@@ -597,8 +596,9 @@ returns the normal `ProductWorkflow`.
   user to connect at least one image/reference node.
 - Good: connect an uploaded style `reference_image` into a `copy_generation` node; the generated copy reflects the
   reference label/role and the provider receives explicit `ReferenceImageInput` metadata.
-- Good: edit a copy node's generated title/selling points/headline/CTA; the persisted `CopySet` and node output update
-  together, and the downstream image node keeps referencing the same edited `copy_set_id`.
+- Good: edit a copy node's structured payload; the persisted `CopySet.structured_payload` and node output update together,
+  old four-field columns are not re-derived, and the downstream image node keeps referencing the same edited
+  `copy_set_id`.
 - Good: connect one uploaded `reference_image` into `image_generation`, then connect the image node to two downstream
   `reference_image` slots; one run creates two generated images and fills both slots.
 - Base: if duplicate edges accidentally connect one image node to the same downstream `reference_image` slot, one run still
@@ -680,7 +680,7 @@ This hides the artifact in opaque JSON only; later history cannot reliably reuse
 ```python
 session.add(copy_set)
 session.flush()
-node.output_json = {"copy_set_id": copy_set.id, "summary": copy_set.poster_headline}
+node.output_json = {"copy_set_id": copy_set.id, "summary": copy_set.structured_payload["summary"]}
 ```
 
 Persist the first-class artifact, then keep only workflow-boundary references and summaries in JSON.
@@ -733,17 +733,14 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
 
 - Application contracts:
   - `CreativeBriefPayload(positioning: str, audience: str, selling_angles: list[str], taboo_phrases: list[str], poster_style_hint: str)`.
-  - `CopyPayloadV2(version: 2, purpose: str | None, summary: str, content: CopyContent, visual_guidance: VisualGuidance | None, derived: LegacyCopyFields | None)`.
-  - `CopyPayload(title: str, selling_points: list[str], poster_headline: str, cta: str)` is a legacy normalization shape,
-    not the provider main contract.
+  - `CopyPayloadV2(version: 2, purpose: str | None, summary: str, content: CopyContent, visual_guidance: VisualGuidance | None)`.
+  - `PosterGenerationInput(..., structured_copy_context: str | None = None)`.
 - Text provider methods:
   - `TextProvider.generate_brief(product: ProductInput) -> tuple[CreativeBriefPayload, str]`.
   - `TextProvider.generate_copy(product: ProductInput, brief: CreativeBriefPayload, config: CopyNodeConfigV2, reference_images: list[ReferenceImageInput] | None = None) -> tuple[CopyPayloadV2, str]`.
 - Persistence/API boundary:
   - `CreativeBrief.payload` and workflow `latest_brief.payload` must expose scalar brief fields as strings.
   - `CopySet.structured_payload` and `CopySet.model_structured_payload` persist the v2 payload.
-  - `CopySet.title`, `CopySet.selling_points`, `CopySet.poster_headline`, and `CopySet.cta` are derived compatibility
-    fields for older API fields, prompt variables, and poster renderer inputs.
 
 ### 3. Contracts
 
@@ -752,18 +749,16 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
   - `CreativeBriefPayload.positioning`
   - `CreativeBriefPayload.audience`
   - `CreativeBriefPayload.poster_style_hint`
-  - `CopyPayload.title`
-  - `CopyPayload.poster_headline`
-  - `CopyPayload.cta`
 - Fields whose contract is already a list must remain lists and must not be flattened into one scalar:
   - `CreativeBriefPayload.selling_angles`
   - `CreativeBriefPayload.taboo_phrases`
-  - `CopyPayload.selling_points`
 - V2 content supports `freeform`, `blocks`, and `layout_brief`. Optional fields such as block `label`, `role`,
-  `visual_hint`, and `derived.cta` must remain optional so the model is not forced to invent fields that the task does not
+  `visual_hint`, and visual guidance must remain optional so the model is not forced to invent fields that the task does not
   need.
-- Legacy four-field copy payloads are normalized into `CopyPayloadV2` before persistence or API serialization. Do not make
-  frontend DTOs accept `string | string[]` for scalar fields.
+- `copy_node_output(...)` exposes `structured_payload` and `summary` for copy content. It must not expose
+  fixed copy-field output keys.
+- Image-generation prompt context should set `PosterGenerationInput.structured_copy_context` from
+  `copy_payload_context_text(normalize_copy_payload(copy_set.structured_payload))`.
 
 ### 4. Validation & Error Matrix
 
@@ -782,11 +777,9 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
 
 - Good: provider returns `{"audience": ["摄影入门用户", "图文内容创作者"]}`; persisted and API-visible payload uses
   `"摄影入门用户、图文内容创作者"`.
-- Good: provider returns `{"title": ["轻巧入门", "随拍即出片"]}`; `CopySet.title` and copy-node output use
-  `"轻巧入门、随拍即出片"`.
-- Good: provider returns `{"version":2,"summary":"卖点速览","content":{"kind":"blocks","blocks":[...]}}`; `CopySet.structured_payload` stores the blocks, while `CopySet.selling_points` is derived for old prompt variables.
+- Good: provider returns `{"version":2,"summary":"卖点速览","content":{"kind":"blocks","blocks":[...]}}`; `CopySet.structured_payload` stores the blocks, and downstream image context reads the structured payload text.
 - Good: provider returns `content.kind="layout_brief"` for information hierarchy; downstream image context receives the
-  section text and visual hints instead of only title/selling-points/headline/CTA.
+  section text and visual hints instead of fixed copy fields.
 - Base: provider returns scalar strings for all scalar fields; values pass through unchanged.
 - Bad: provider returns `{"audience": []}` or `{"audience": [{"name": "摄影入门用户"}]}`; validation fails instead of
   inventing a display string.
@@ -795,14 +788,13 @@ artifacts, such as a newly connected empty `reference_image` slot that needs its
 
 ### 6. Tests Required
 
-- Contract regression directly validates `CreativeBriefPayload` and `CopyPayload` with scalar text arrays and malformed
-  arrays; assert good arrays are joined with `、` and bad arrays raise `ValidationError`.
-- Contract regression validates `CopyPayloadV2` with `freeform`, `blocks`, and `layout_brief`, then asserts derived legacy
-  fields are available.
+- Contract regression directly validates `CreativeBriefPayload` with scalar text arrays and malformed arrays; assert good
+  arrays are joined with `、` and bad arrays raise `ValidationError`.
+- Contract regression validates `CopyPayloadV2` with `freeform`, `blocks`, and `layout_brief`.
 - Copy-generation workflow regression monkeypatches the text provider to return scalar arrays and asserts the persisted
-  `CreativeBrief.payload` and `CopySet` fields are strings.
-- Copy-generation workflow regression asserts copy-node `output_json.structured_payload.version == 2` and
-  `output_json.derived_fields` exists.
+  `CreativeBrief.payload` fields are normalized strings while `CopySet` persists structured payloads.
+- Copy-generation workflow regression asserts copy-node `output_json.structured_payload.version == 2` and does not expose
+  fixed copy-field output keys.
 - Canvas-template regression asserts every built-in `copy_generation` node config includes v2 `version`, `purpose`, and
   `output_mode`.
 - Product workflow DAG regression runs `POST /api/products/{product_id}/workflow/run` with provider scalar arrays and

@@ -319,11 +319,7 @@ def update_workflow_copy_set(
     session: Session,
     *,
     node_id: str,
-    title: str | None,
-    selling_points: list[str] | None,
-    poster_headline: str | None,
-    cta: str | None,
-    structured_payload: dict[str, Any] | None = None,
+    structured_payload: dict[str, Any],
 ) -> ProductWorkflow:
     node = product_workflow_graph.get_node_or_raise(session, node_id)
     if node.node_type != WorkflowNodeType.COPY_GENERATION:
@@ -341,10 +337,6 @@ def update_workflow_copy_set(
     copy_set = update_copy_set(
         session,
         copy_set_id=copy_set.id,
-        title=title,
-        selling_points=selling_points,
-        poster_headline=poster_headline,
-        cta=cta,
         structured_payload=structured_payload,
     )
     node = product_workflow_graph.get_node_or_raise(session, node_id)

@@ -64,13 +64,6 @@ export interface CreativeBriefSummary {
   created_at: string;
 }
 
-export interface LegacyCopyFields {
-  title: string;
-  selling_points: string[];
-  poster_headline: string;
-  cta: string;
-}
-
 export interface CopyBlock {
   id: string;
   role?: string | null;
@@ -108,22 +101,13 @@ export interface CopyPayloadV2 {
   summary: string;
   content: CopyContent;
   visual_guidance?: VisualGuidance | null;
-  derived?: LegacyCopyFields | null;
 }
 
 export interface CopySet {
   id: string;
   creative_brief_id: string | null;
   status: CopyStatus;
-  title: string;
-  selling_points: string[];
-  poster_headline: string;
-  cta: string;
   structured_payload: CopyPayloadV2;
-  model_title: string;
-  model_selling_points: string[];
-  model_poster_headline: string;
-  model_cta: string;
   model_structured_payload: CopyPayloadV2 | null;
   provider_name: string;
   model_name: string;
@@ -409,11 +393,7 @@ export interface UpdateUserTemplateGroupInput {
 }
 
 export interface CopySetUpdateRequest {
-  title?: string;
-  selling_points?: string[];
-  poster_headline?: string;
-  cta?: string;
-  structured_payload?: CopyPayloadV2;
+  structured_payload: CopyPayloadV2;
 }
 
 export interface ImageSessionAsset {

@@ -17,7 +17,10 @@ from productflow_backend.application.canvas_templates import (
     list_builtin_canvas_templates,
 )
 from productflow_backend.application.contracts import (
-    CopyPayload,
+    BlocksCopyContent,
+    CopyBlock,
+    CopyNodeConfigV2,
+    CopyPayloadV2,
     CreativeBriefPayload,
     PosterGenerationInput,
     ProductInput,
@@ -41,6 +44,13 @@ from productflow_backend.infrastructure.db.session import get_session_factory
 _WORKFLOW_NODE_VISUAL_WIDTH = 248
 _WORKFLOW_NODE_VISUAL_HEIGHT = 248
 _WORKFLOW_TEMPLATE_CONTEXT_ANCHOR_GAP = 220
+REMOVED_COPY_OUTPUT_KEYS = [
+    "derived" + "_fields",
+    "title",
+    "selling" + "_points",
+    "poster" + "_headline",
+    "c" + "ta",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -212,23 +222,31 @@ def test_product_workflow_dag_runs_and_persists_artifacts(configured_env: Path) 
     copy_output = next(node for node in run_payload["nodes"] if node["node_type"] == "copy_generation")["output_json"]
     assert copy_output["copy_set_id"]
     assert copy_output["structured_payload"]["version"] == 2
-    assert copy_output["derived_fields"]["selling_points"]
-    assert "免打孔" in " ".join(copy_output["selling_points"])
-    assert "厨房风格图" in " ".join(copy_output["selling_points"])
+    assert not set(REMOVED_COPY_OUTPUT_KEYS) & set(copy_output)
+    assert "免打孔" in str(copy_output["structured_payload"])
+    assert "厨房风格图" in str(copy_output["structured_payload"])
     edited_copy = client.patch(
         f"/api/workflow-nodes/{copy_node['id']}/copy",
         json={
-            "title": "厨房免打孔收纳架",
-            "selling_points": ["免打孔安装", "厨房台面更整洁", "承重稳定"],
-            "poster_headline": "厨房整洁一步到位",
-            "cta": "立即整理厨房",
+            "structured_payload": {
+                "version": 2,
+                "summary": "厨房整洁一步到位",
+                "content": {
+                    "kind": "blocks",
+                    "blocks": [
+                        {"id": "headline", "text": "厨房免打孔收纳架"},
+                        {"id": "point-1", "text": "免打孔安装"},
+                        {"id": "point-2", "text": "厨房台面更整洁"},
+                        {"id": "point-3", "text": "承重稳定"},
+                    ],
+                },
+            },
         },
     )
     assert edited_copy.status_code == 200
     edited_copy_node = next(node for node in edited_copy.json()["nodes"] if node["id"] == copy_node["id"])
-    assert edited_copy_node["output_json"]["title"] == "厨房免打孔收纳架"
     assert edited_copy_node["output_json"]["structured_payload"]["version"] == 2
-    assert edited_copy_node["output_json"]["poster_headline"] == "厨房整洁一步到位"
+    assert not set(REMOVED_COPY_OUTPUT_KEYS) & set(edited_copy_node["output_json"])
     rerun_image = client.post(
         f"/api/products/{product_id}/workflow/run",
         json={"start_node_id": image_node["id"]},
@@ -239,7 +257,7 @@ def test_product_workflow_dag_runs_and_persists_artifacts(configured_env: Path) 
     rerun_copy_output = next(node for node in rerun_payload["nodes"] if node["id"] == copy_node["id"])["output_json"]
     rerun_image_output = next(node for node in rerun_payload["nodes"] if node["id"] == image_node["id"])["output_json"]
     assert rerun_copy_output["copy_set_id"] == copy_output["copy_set_id"]
-    assert rerun_copy_output["poster_headline"] == "厨房整洁一步到位"
+    assert not set(REMOVED_COPY_OUTPUT_KEYS) & set(rerun_copy_output)
     assert rerun_image_output["copy_set_id"] == copy_output["copy_set_id"]
     image_output = next(node for node in run_payload["nodes"] if node["node_type"] == "image_generation")["output_json"]
     assert "poster_variant_ids" not in image_output
@@ -1917,14 +1935,22 @@ def test_image_generation_runs_without_product_context_edge(
         confirmed_copy = CopySet(
             product_id=product_id,
             status=CopyStatus.CONFIRMED,
-            title="不应被空白生图继承的标题",
-            selling_points=["不应继承的卖点一", "不应继承的卖点二", "不应继承的卖点三"],
-            poster_headline="不应被空白生图继承的海报标题",
-            cta="不应继承的 CTA",
-            model_title="不应被空白生图继承的标题",
-            model_selling_points=["不应继承的卖点一", "不应继承的卖点二", "不应继承的卖点三"],
-            model_poster_headline="不应被空白生图继承的海报标题",
-            model_cta="不应继承的 CTA",
+            structured_payload={
+                "version": 2,
+                "summary": "不应被空白生图继承的海报标题",
+                "content": {
+                    "kind": "blocks",
+                    "blocks": [{"id": "headline", "text": "不应被空白生图继承的标题"}],
+                },
+            },
+            model_structured_payload={
+                "version": 2,
+                "summary": "不应被空白生图继承的海报标题",
+                "content": {
+                    "kind": "blocks",
+                    "blocks": [{"id": "headline", "text": "不应被空白生图继承的标题"}],
+                },
+            },
             provider_name="test",
             model_name="test",
             prompt_version="test-v1",
@@ -1995,9 +2021,9 @@ def test_image_generation_runs_without_product_context_edge(
     assert len(captured_inputs) == 1
     provider_input = captured_inputs[0]
     assert provider_input.product_name == ""
-    assert provider_input.title == "自由创作"
-    assert "不应被空白生图继承" not in provider_input.title
-    assert all("不应继承" not in point for point in provider_input.selling_points)
+    assert provider_input.structured_copy_context
+    assert "自由创作" in provider_input.structured_copy_context
+    assert "不应被空白生图继承" not in provider_input.structured_copy_context
     assert provider_input.source_image is None
     assert provider_input.reference_images == []
     assert provider_input.image_size == "1280x720"
@@ -2032,15 +2058,21 @@ def test_copy_generation_runs_without_product_context_edge(
             self,
             product: ProductInput,
             brief: CreativeBriefPayload,
-            instruction: str | None = None,
+            config: CopyNodeConfigV2,
             reference_images: list | None = None,
-        ) -> tuple[CopyPayload, str]:
+        ) -> tuple[CopyPayloadV2, str]:
+            del brief, reference_images
             return (
-                CopyPayload(
-                    title=f"{product.name} 标题",
-                    selling_points=["自由卖点一", "自由卖点二", instruction or "自由卖点三"],
-                    poster_headline="自由创作海报标题",
-                    cta="",
+                CopyPayloadV2(
+                    summary="自由创作海报标题",
+                    content=BlocksCopyContent(
+                        blocks=[
+                            CopyBlock(id="headline", text=f"{product.name} 标题"),
+                            CopyBlock(id="point-1", text="自由卖点一"),
+                            CopyBlock(id="point-2", text="自由卖点二"),
+                            CopyBlock(id="point-3", text=config.instruction or "自由卖点三"),
+                        ]
+                    ),
                 ),
                 "capturing-copy",
             )

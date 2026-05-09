@@ -522,7 +522,6 @@ function CopyNodeInspector({
               onChange={(copyStructuredPayload) => onDraftChange({ ...draft, copyStructuredPayload })}
             />
           ) : null}
-          <DerivedCopyFields draft={draft} />
           <div className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] leading-5 text-zinc-500">
             文案编辑会自动保存；运行前也会先同步当前草稿。
           </div>
@@ -811,19 +810,6 @@ function OptionalTextArea({
 
 function hasText(value: string | null | undefined): boolean {
   return Boolean(value?.trim());
-}
-
-function DerivedCopyFields({ draft }: { draft: NodeConfigDraft }) {
-  const points = draft.copySellingPoints.split("\n").filter(Boolean);
-  return (
-    <div className="rounded-md border border-dashed border-zinc-200 bg-white px-3 py-2 text-[11px] leading-5 text-zinc-500">
-      <div className="mb-1 font-semibold text-zinc-600">派生字段</div>
-      <div>标题：{draft.copyTitle || "未派生"}</div>
-      <div>卖点：{points.length ? points.join(" / ") : "未派生"}</div>
-      <div>海报标题：{draft.copyPosterHeadline || "未派生"}</div>
-      <div>CTA：{draft.copyCta || "未派生"}</div>
-    </div>
-  );
 }
 
 function ImageGenerationInspector({

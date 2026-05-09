@@ -52,7 +52,7 @@ Expected result: the copy card generates an editable structured copy payload. It
 
 If you are not satisfied, change only one direction and try again, such as "make it younger", "make it more concise", or "use fewer exaggerated words".
 
-The copy detail editor shows fields that already have content. Empty optional fields collapse into compact add buttons such as "add label" or "add visual guidance", and long text boxes grow with their content. Title, selling points, poster headline, and button copy still appear as derived compatibility fields, but they are not the main fields that every result must fill.
+The copy detail editor shows fields that already have content. Empty optional fields collapse into compact add buttons such as "add label" or "add visual guidance", and long text boxes grow with their content. Later image generation reads the structured copy, so every result can use the shape that fits the scene.
 
 ### 4. Add or Connect Reference Images
 
@@ -165,7 +165,7 @@ When a reference image card is selected, assets in the right-side **Images** pan
 
 Generates editable structured copy. The result can be freeform text, copy blocks, layout sections, and visual guidance. After generation, you can keep editing inside the card. Edited structured copy is used by later image generation.
 
-Title, selling points, poster headline, and button copy are derived from the structured payload for legacy poster rendering and historical data. You do not need to invent a CTA or fixed selling-point list when the scene does not need one.
+The current workbench uses structured copy as later image-generation context, so you do not need to invent fixed copy fields when the scene does not need them.
 
 ### Image Generation
 
@@ -209,8 +209,8 @@ Restoring defaults deletes the custom value from the database and returns to the
 
 Common placeholders:
 
-- Workbench image template: `product_name`, `category`, `price`, `source_note`, `instruction`, `title`, `selling_points`, `poster_headline`, `cta`, `context_block`, `reference_policy`, `size`, `kind`, `kind_label`, `kind_requirements`.
-- Workbench edit template: `product_name`, `category`, `price`, `source_note`, `instruction`, `title`, `selling_points`, `poster_headline`, `cta`, `context_block`, `reference_policy`, `size`, `kind`, `kind_label`, `kind_requirements`.
+- Workbench image template: `product_name`, `category`, `price`, `source_note`, `instruction`, `context_block`, `reference_policy`, `size`, `kind`, `kind_label`, `kind_requirements`.
+- Workbench edit template: `product_name`, `category`, `price`, `source_note`, `instruction`, `context_block`, `reference_policy`, `size`, `kind`, `kind_label`, `kind_requirements`.
 - Iterative image template: `prompt`, `size`, `history_block`.
 
 If a placeholder is misspelled, the system does not crash just because of the unknown placeholder. That part may not be replaced as expected. Prefer small edits followed by testing.

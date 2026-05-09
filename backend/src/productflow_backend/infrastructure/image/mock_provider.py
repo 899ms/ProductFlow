@@ -45,16 +45,25 @@ class MockImageProvider(ImageProvider):
         body_font = _load_font(self.poster_font_path, 28 if kind == PosterKind.MAIN_IMAGE else 32)
 
         draw.rounded_rectangle((48, 48, width - 48, height - 48), radius=36, outline=accent, width=6)
-        draw.text((84, 90), poster.poster_headline[:28], font=title_font, fill=foreground)
+        context_lines = [line.strip() for line in (poster.structured_copy_context or "").splitlines() if line.strip()]
+        headline = context_lines[0].removeprefix("摘要：") if context_lines else poster.product_name
+        points = context_lines[1:4]
+
+        draw.text((84, 90), headline[:28], font=title_font, fill=foreground)
         draw.text((84, 180), poster.product_name[:32], font=body_font, fill=foreground)
 
-        for index, point in enumerate(poster.selling_points[:3]):
+        for index, point in enumerate(points[:3]):
             top = 280 + index * 72
             draw.rounded_rectangle((84, top, width - 84, top + 48), radius=18, fill=accent)
             draw.text((108, top + 10), point[:28], font=body_font, fill=(255, 255, 255))
 
         draw.rounded_rectangle((84, height - 140, width - 84, height - 72), radius=28, fill=foreground)
-        draw.text((120, height - 126), poster.cta[:30], font=body_font, fill=background)
+        draw.text(
+            (120, height - 126),
+            (poster.instruction or "生成图片")[:30],
+            font=body_font,
+            fill=background,
+        )
         draw.text(
             (84, height - 210),
             f"Refs: {len(poster.reference_images)}",

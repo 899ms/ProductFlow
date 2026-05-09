@@ -804,8 +804,8 @@ request_payload = {"model": settings.image_generate_model, "input": input_payloa
   only effective prompt copy inside provider methods.
 - Prompt templates may expose documented placeholders, but unknown placeholders should not crash provider calls.
 - `prompt_poster_image_template` is for workflow image-generation runs with an explicit copy input.
-  `prompt_poster_image_edit_template` is for image-edit / image-to-image runs without an explicit copy input, and must not
-  require title/selling-points/headline/CTA placeholders to make sense.
+`prompt_poster_image_edit_template` is for image-edit / image-to-image runs without an explicit copy input, and must not
+  require fixed copy-field placeholders to make sense.
 - Prompt fields are not secrets and may be visible in the settings UI, but rendered prompts and provider payloads must not
   be logged.
 
@@ -825,8 +825,8 @@ request_payload = {"model": settings.image_generate_model, "input": input_payloa
 - Base: clean database has no prompt rows; providers use default prompt text from `Settings`.
 - Bad: adding a new prompt in `openai_provider.py` without a `Settings` field, UI definition, reset path, and regression
   test.
-- Bad: using `prompt_poster_image_template` for no-copy image edits, which forces title/selling-points/headline/CTA language
-  into a task that should only modify existing imagery.
+- Bad: using `prompt_poster_image_template` for no-copy image edits, which forces fixed copy-field language into a task
+  that should only modify existing imagery.
 
 #### 6. Tests Required
 

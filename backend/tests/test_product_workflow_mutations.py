@@ -45,14 +45,16 @@ def _create_poster_variant_for_binding(
     try:
         copy_set = CopySet(
             product_id=product_id,
-            title="绑定海报文案",
-            selling_points=["卖点一"],
-            poster_headline="绑定海报标题",
-            cta="立即了解",
-            model_title="绑定海报文案",
-            model_selling_points=["卖点一"],
-            model_poster_headline="绑定海报标题",
-            model_cta="立即了解",
+            structured_payload={
+                "version": 2,
+                "summary": "绑定海报标题",
+                "content": {"kind": "blocks", "blocks": [{"id": "headline", "text": "绑定海报文案"}]},
+            },
+            model_structured_payload={
+                "version": 2,
+                "summary": "绑定海报标题",
+                "content": {"kind": "blocks", "blocks": [{"id": "headline", "text": "绑定海报文案"}]},
+            },
             provider_name="test",
             model_name="test",
             prompt_version="test",

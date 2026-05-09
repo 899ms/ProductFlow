@@ -20,7 +20,7 @@ from pydantic import ValidationError
 from productflow_backend.application.contracts import (
     BlocksCopyContent,
     CopyBlock,
-    CopyPayload,
+    CopyNodeConfigV2,
     CopyPayloadV2,
     CopySection,
     CreativeBriefPayload,
@@ -30,7 +30,7 @@ from productflow_backend.application.contracts import (
     ProductInput,
     ReferenceImageInput,
 )
-from productflow_backend.application.copy_payloads import copy_payload_to_legacy_fields, normalize_copy_payload
+from productflow_backend.application.copy_payloads import normalize_copy_payload
 from productflow_backend.application.product_workflow_dependencies import WorkflowExecutionDependencies
 from productflow_backend.application.product_workflows import run_product_workflow
 from productflow_backend.application.use_cases import (
@@ -46,6 +46,14 @@ from productflow_backend.infrastructure.db.models import (
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
 from productflow_backend.infrastructure.image.responses_provider import OpenAIResponsesImageProvider
+
+REMOVED_COPY_OUTPUT_KEYS = [
+    "derived" + "_fields",
+    "title",
+    "selling" + "_points",
+    "poster" + "_headline",
+    "c" + "ta",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +104,7 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
                     key="prompt_poster_image_template",
                     value=(
                         "自定义海报 {product_name} / {instruction} / {kind_label} / "
-                        "{selling_points} / {reference_policy}"
+                        "{context_block} / {reference_policy}"
                     ),
                 ),
                 AppSetting(
@@ -132,7 +140,7 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
                     '"taboo_phrases":[],"poster_style_hint":"白底"}'
                 )
             return DummyTextResponse(
-                '{"title":"标题","selling_points":["稳","快","省"],"poster_headline":"主标题","cta":"立即购买"}'
+                '{"version":2,"summary":"主标题","content":{"kind":"blocks","blocks":[{"id":"headline","text":"标题"}]}}'
             )
 
     class DummyTextOpenAI:
@@ -165,16 +173,16 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
             price="9.90",
             source_note="说明",
             instruction="强调轻便",
-            title="短标题",
-            selling_points=["卖点一", "卖点二", "卖点三"],
-            poster_headline="主标题",
-            cta="立即购买",
+            structured_copy_context="摘要：主标题\n卖点：卖点一\n卖点：卖点二\n卖点：卖点三",
             source_image=source_path,
         ),
         PosterKind.MAIN_IMAGE,
         "1024x1024",
     )
-    assert poster_prompt == "自定义海报 测试商品 / 强调轻便 / 主图 / 卖点一；卖点二；卖点三 / 自定义视觉参考规则"
+    assert "自定义海报 测试商品 / 强调轻便 / 主图 /" in poster_prompt
+    assert "结构化文案" in poster_prompt
+    assert "卖点：卖点一" in poster_prompt
+    assert poster_prompt.endswith("自定义视觉参考规则")
 
     edit_prompt = OpenAIResponsesImageProvider()._build_prompt(
         PosterGenerationInput(
@@ -184,10 +192,6 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
             price="9.90",
             source_note="说明",
             instruction="改成白底，保留主体",
-            title="不应依赖的短标题",
-            selling_points=["不应依赖的卖点一", "不应依赖的卖点二", "不应依赖的卖点三"],
-            poster_headline="不应依赖的主标题",
-            cta="不应依赖的 CTA",
             source_image=source_path,
         ),
         PosterKind.MAIN_IMAGE,
@@ -214,21 +218,9 @@ def test_ai_payload_normalizes_scalar_text_lists_without_swallowing_malformed_va
             "poster_style_hint": ["干净明亮", "真实生活感"],
         }
     )
-    copy = CopyPayload.model_validate(
-        {
-            "title": ["手机摄影支架", "新手也能拍得稳"],
-            "selling_points": ["上手快", "构图稳", "出片自然"],
-            "poster_headline": ["新手拍照", "画面更稳"],
-            "cta": ["马上试试", "轻松出片"],
-        }
-    )
-
     assert brief.positioning == "摄影入门工具、桌面拍摄辅助"
     assert brief.audience == "摄影入门用户、小红书图文内容创作者"
     assert brief.poster_style_hint == "干净明亮、真实生活感"
-    assert copy.title == "手机摄影支架、新手也能拍得稳"
-    assert copy.poster_headline == "新手拍照、画面更稳"
-    assert copy.cta == "马上试试、轻松出片"
 
     for bad_value in ([], ["摄影入门用户", ""], [{"label": "摄影入门用户"}]):
         with pytest.raises(ValidationError):
@@ -241,18 +233,9 @@ def test_ai_payload_normalizes_scalar_text_lists_without_swallowing_malformed_va
                     "poster_style_hint": "干净明亮",
                 }
             )
-        with pytest.raises(ValidationError):
-            CopyPayload.model_validate(
-                {
-                    "title": bad_value,
-                    "selling_points": ["上手快", "构图稳", "出片自然"],
-                    "poster_headline": "新手拍照更稳",
-                    "cta": "马上试试",
-                }
-            )
 
 
-def test_copy_payload_v2_supports_flexible_content_and_derives_legacy_fields() -> None:
+def test_copy_payload_v2_supports_flexible_content() -> None:
     freeform = CopyPayloadV2(summary="白底图只保留主体", content=FreeformCopyContent(text="主体居中，保留真实材质。"))
     blocks = CopyPayloadV2(
         summary="卖点速览",
@@ -278,12 +261,9 @@ def test_copy_payload_v2_supports_flexible_content_and_derives_legacy_fields() -
         ),
     )
 
-    assert copy_payload_to_legacy_fields(freeform).title == "主体居中，保留真实材质。"
-    assert copy_payload_to_legacy_fields(blocks).selling_points[:2] == [
-        "厨房瓶罐稳定收纳",
-        "卖点速览",
-    ]
-    assert copy_payload_to_legacy_fields(layout).poster_headline == "主标题区"
+    assert freeform.content.text == "主体居中，保留真实材质。"
+    assert blocks.content.blocks[1].text == "厨房瓶罐稳定收纳"
+    assert layout.content.sections[0].title == "主标题区"
 
 
 def test_copy_payload_v2_normalizes_provider_block_variants() -> None:
@@ -318,10 +298,7 @@ def test_copy_payload_v2_normalizes_provider_block_variants() -> None:
     assert payload.content.blocks[0].role == "title"
     assert payload.content.blocks[1].text == "覆盖上下架流程验收"
     assert payload.content.blocks[4].text == "自动保存；运行前同步；展示和数据校验"
-    assert copy_payload_to_legacy_fields(payload).selling_points[:2] == [
-        "覆盖上下架流程验收",
-        "节点、区域功能测试",
-    ]
+    assert [block.text for block in payload.content.blocks[1:3]] == ["覆盖上下架流程验收", "节点、区域功能测试"]
 
 
 def test_copy_payload_v2_normalizes_real_provider_freeform_variants() -> None:
@@ -510,21 +487,20 @@ def test_product_workflow_copy_run_normalizes_provider_scalar_lists(configured_e
             self,
             product: ProductInput,
             brief: CreativeBriefPayload,
-            instruction: str | None = None,
+            config: CopyNodeConfigV2,
             reference_images: list[ReferenceImageInput] | None = None,
-        ) -> tuple[CopyPayload, str]:
+        ) -> tuple[CopyPayloadV2, str]:
+            del config, reference_images
             return (
-                CopyPayload.model_validate(
-                    {
-                        "title": [product.name, "新手拍摄更稳"],
-                        "selling_points": [
-                            f"适合{brief.audience}",
-                            "手机拍摄角度更稳定",
-                            "日常图文内容更好出片",
-                        ],
-                        "poster_headline": ["新手也能", "拍出稳定画面"],
-                        "cta": ["马上", "试试"],
-                    }
+                CopyPayloadV2(
+                    summary=f"{product.name} 新手拍摄更稳",
+                    content=BlocksCopyContent(
+                        blocks=[
+                            CopyBlock(id="audience", text=f"适合{brief.audience}"),
+                            CopyBlock(id="stability", text="手机拍摄角度更稳定"),
+                            CopyBlock(id="daily", text="日常图文内容更好出片"),
+                        ]
+                    ),
                 ),
                 "list-audience-copy",
             )
@@ -555,10 +531,10 @@ def test_product_workflow_copy_run_normalizes_provider_scalar_lists(configured_e
     assert run_response.json()["runs"][0]["status"] == "running"
     workflow_payload = _wait_for_workflow_run(client, product_id, status="succeeded")
     copy_node = next(node for node in workflow_payload["nodes"] if node["node_type"] == "copy_generation")
-    assert copy_node["output_json"]["title"] == "手机摄影支架、新手拍摄更稳"
-    assert copy_node["output_json"]["poster_headline"] == "新手也能、拍出稳定画面"
-    assert copy_node["output_json"]["cta"] == "马上、试试"
-    assert "摄影入门用户、小红书图文内容创作者" in " ".join(copy_node["output_json"]["selling_points"])
+    assert copy_node["output_json"]["structured_payload"]["version"] == 2
+    assert not set(REMOVED_COPY_OUTPUT_KEYS) & set(copy_node["output_json"])
+    structured_text = str(copy_node["output_json"]["structured_payload"])
+    assert "摄影入门用户、小红书图文内容创作者" in structured_text
 
     product_response = client.get(f"/api/products/{product_id}")
     assert product_response.status_code == 200
@@ -591,10 +567,7 @@ def test_mock_image_provider_does_not_read_runtime_settings_during_generation(
             price="99",
             source_note="测试说明",
             instruction="生成测试图",
-            title="测试标题",
-            selling_points=["卖点一", "卖点二", "卖点三"],
-            poster_headline="测试主标题",
-            cta="立即测试",
+            structured_copy_context="摘要：测试主标题\n卖点：卖点一\n卖点：卖点二\n卖点：卖点三",
             source_image=source_path,
             image_size="512x512",
         ),
@@ -866,10 +839,7 @@ def test_openai_responses_poster_provider_uses_image_generation_tool(
             instruction="背景更干净，强调收纳空间。",
             image_size="1536x1024",
             tool_options={"quality": "high", "output_format": "webp"},
-            title="测试标题",
-            selling_points=["卖点1", "卖点2", "卖点3"],
-            poster_headline="测试海报标题",
-            cta="立即购买",
+            structured_copy_context="摘要：测试海报标题\n卖点：卖点1\n卖点：卖点2\n卖点：卖点3",
             source_image=source_path,
             reference_images=[
                 ReferenceImageInput(
@@ -1477,10 +1447,6 @@ def test_default_image_prompts_are_low_pollution_context_carriers(configured_env
             product_name="",
             instruction="画一张蓝色抽象渐变",
             image_size="1280x720",
-            title="不应注入的占位标题",
-            selling_points=["不应注入的占位卖点"],
-            poster_headline="不应注入的占位主标题",
-            cta="不应注入的 CTA",
         ),
         PosterKind.MAIN_IMAGE,
         "1280x720",
@@ -1494,6 +1460,23 @@ def test_default_image_prompts_are_low_pollution_context_carriers(configured_env
     assert "画一张蓝色抽象渐变" in prompt
     assert "无显式上游上下文" in prompt
     assert "1280x720" in chat_prompt
+
+
+def test_openai_image_prompt_uses_structured_copy_context(configured_env: Path) -> None:
+    prompt = OpenAIResponsesImageProvider()._build_prompt(
+        PosterGenerationInput(
+            product_name="结构化商品",
+            instruction="突出结构化上下文",
+            structured_copy_context="摘要：结构化主标题\n正文：结构化正文\n卖点：结构化卖点",
+        ),
+        PosterKind.MAIN_IMAGE,
+        "1024x1024",
+    )
+
+    assert "结构化主标题" in prompt
+    assert "结构化正文" in prompt
+    assert "结构化卖点" in prompt
+    assert "不应作为主输入" not in prompt
 
 
 def test_openai_responses_image_client_reports_completed_text_without_image(

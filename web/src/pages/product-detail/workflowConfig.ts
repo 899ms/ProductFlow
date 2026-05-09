@@ -11,7 +11,7 @@ import {
   imageToolOptionsFromUnknown,
 } from "../../lib/imageToolOptions";
 import type { NodeConfigDraft } from "./types";
-import { configString, outputStringArray, outputText } from "./utils";
+import { configString, outputText } from "./utils";
 
 function outputStructuredPayload(node: WorkflowNode | null): CopyPayloadV2 | null {
   const payload = node?.output_json?.structured_payload;
@@ -31,9 +31,6 @@ export function draftFromNode(
   const copySet = copySetId
     ? product?.copy_sets.find((item) => item.id === copySetId)
     : null;
-  const outputSellingPoints = node
-    ? outputStringArray(node, "selling_points")
-    : [];
   return {
     title: node?.title ?? "",
     productName: configString(node, "name", product?.name ?? ""),
@@ -47,20 +44,6 @@ export function draftFromNode(
     channel: configString(node, "channel", "商品主图"),
     size: configString(node, "size", "1024x1024"),
     toolOptions: imageToolOptionsFromUnknown(node?.config_json?.tool_options),
-    copyTitle:
-      copySet?.title ??
-      (node?.output_json ? (outputText(node.output_json, "title") ?? "") : ""),
-    copySellingPoints: (copySet?.selling_points ?? outputSellingPoints).join(
-      "\n",
-    ),
-    copyPosterHeadline:
-      copySet?.poster_headline ??
-      (node?.output_json
-        ? (outputText(node.output_json, "poster_headline") ?? "")
-        : ""),
-    copyCta:
-      copySet?.cta ??
-      (node?.output_json ? (outputText(node.output_json, "cta") ?? "") : ""),
     copyStructuredPayload: copySet?.structured_payload ?? outputStructuredPayload(node),
   };
 }

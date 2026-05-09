@@ -637,10 +637,14 @@ export function ProductDetailPage() {
   });
 
   const updateNodeCopyMutation = useMutation({
-    mutationFn: (node: WorkflowNode) =>
-      api.updateWorkflowNodeCopy(node.id, {
-        ...(draft.copyStructuredPayload ? { structured_payload: draft.copyStructuredPayload } : {}),
-      }),
+    mutationFn: (node: WorkflowNode) => {
+      if (!draft.copyStructuredPayload) {
+        throw new Error("缺少结构化文案");
+      }
+      return api.updateWorkflowNodeCopy(node.id, {
+        structured_payload: draft.copyStructuredPayload,
+      });
+    },
     onSuccess: async (nextWorkflow) => {
       setError("");
       queryClient.setQueryData(["product-workflow", productId], nextWorkflow);

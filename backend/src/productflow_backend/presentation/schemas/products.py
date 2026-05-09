@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from productflow_backend.application.copy_payloads import copy_set_structured_payload
 from productflow_backend.application.use_cases import derive_product_state
@@ -49,15 +49,7 @@ class CopySetResponse(BaseModel):
     id: str
     creative_brief_id: str | None
     status: CopyStatus
-    title: str
-    selling_points: list[str]
-    poster_headline: str
-    cta: str
     structured_payload: dict[str, Any]
-    model_title: str
-    model_selling_points: list[str]
-    model_poster_headline: str
-    model_cta: str
     model_structured_payload: dict[str, Any] | None = None
     provider_name: str
     model_name: str
@@ -128,10 +120,7 @@ class ProductHistoryResponse(BaseModel):
 
 
 class CopySetUpdateRequest(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=500)
-    selling_points: list[str] | None = Field(default=None, min_length=3, max_length=5)
-    poster_headline: str | None = Field(default=None, min_length=1, max_length=500)
-    cta: str | None = Field(default=None, min_length=1, max_length=300)
+    structured_payload: dict[str, Any]
 
 
 def serialize_source_asset(asset: SourceAsset) -> SourceAssetResponse:
@@ -163,15 +152,7 @@ def serialize_copy_set(copy_set: CopySet) -> CopySetResponse:
         id=copy_set.id,
         creative_brief_id=copy_set.creative_brief_id,
         status=copy_set.status,
-        title=copy_set.title,
-        selling_points=copy_set.selling_points,
-        poster_headline=copy_set.poster_headline,
-        cta=copy_set.cta,
         structured_payload=copy_set_structured_payload(copy_set).model_dump(mode="json"),
-        model_title=copy_set.model_title,
-        model_selling_points=copy_set.model_selling_points,
-        model_poster_headline=copy_set.model_poster_headline,
-        model_cta=copy_set.model_cta,
         model_structured_payload=copy_set.model_structured_payload,
         provider_name=copy_set.provider_name,
         model_name=copy_set.model_name,

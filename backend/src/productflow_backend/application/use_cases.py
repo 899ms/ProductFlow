@@ -6,8 +6,7 @@ from typing import Any
 from sqlalchemy import desc, exists, func, literal, select
 from sqlalchemy.orm import Session, selectinload
 
-from productflow_backend.application.contracts import LegacyCopyFields
-from productflow_backend.application.copy_payloads import copy_payload_to_legacy_fields, normalize_copy_payload
+from productflow_backend.application.copy_payloads import normalize_copy_payload
 from productflow_backend.application.product_workflow_templates import (
     materialize_product_workflow_from_template,
     resolve_product_creation_canvas_template,
@@ -275,45 +274,11 @@ def update_copy_set(
     session: Session,
     *,
     copy_set_id: str,
-    title: str | None,
-    selling_points: list[str] | None,
-    poster_headline: str | None,
-    cta: str | None,
-    structured_payload: dict[str, Any] | None = None,
+    structured_payload: dict[str, Any],
 ) -> CopySet:
     copy_set = _get_copy_set_or_raise(session, copy_set_id)
-    if structured_payload is not None:
-        payload = normalize_copy_payload(structured_payload)
-        legacy = copy_payload_to_legacy_fields(payload)
-        copy_set.structured_payload = payload.model_dump(mode="json")
-        copy_set.title = legacy.title
-        copy_set.selling_points = legacy.selling_points
-        copy_set.poster_headline = legacy.poster_headline
-        copy_set.cta = legacy.cta
-    else:
-        legacy = LegacyCopyFields(
-            title=_normalize_required_text(title, field_name="标题", max_length=500)
-            if title is not None
-            else copy_set.title,
-            selling_points=selling_points if selling_points is not None else copy_set.selling_points,
-            poster_headline=_normalize_required_text(poster_headline, field_name="海报标题", max_length=500)
-            if poster_headline is not None
-            else copy_set.poster_headline,
-            cta=_normalize_required_text(cta, field_name="CTA", max_length=300) if cta is not None else copy_set.cta,
-        )
-        payload = normalize_copy_payload(
-            {
-                "title": legacy.title,
-                "selling_points": legacy.selling_points,
-                "poster_headline": legacy.poster_headline,
-                "cta": legacy.cta,
-            }
-        )
-        copy_set.structured_payload = payload.model_dump(mode="json")
-        copy_set.title = legacy.title
-        copy_set.selling_points = legacy.selling_points
-        copy_set.poster_headline = legacy.poster_headline
-        copy_set.cta = legacy.cta
+    payload = normalize_copy_payload(structured_payload)
+    copy_set.structured_payload = payload.model_dump(mode="json")
     copy_set.edited_at = now_utc()
     session.commit()
     session.refresh(copy_set)

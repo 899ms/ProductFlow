@@ -6,11 +6,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from productflow_backend.application.contracts import LegacyCopyFields
+from productflow_backend.application.contracts import BlocksCopyContent, CopyBlock, CopyPayloadV2
 from productflow_backend.application.copy_payloads import (
-    copy_payload_to_legacy_fields,
     copy_payload_to_output,
-    legacy_copy_fields_to_payload,
+    normalize_copy_payload,
 )
 from productflow_backend.application.product_workflow_context import optional_config_text
 from productflow_backend.application.time import now_utc
@@ -49,42 +48,31 @@ def create_context_copy_set(
     instruction = optional_config_text(node.config_json, "instruction")
     product_name = product_context["name"] or "自由创作"
     source_note = product_context["source_note"]
-    selling_points = [
-        item
-        for item in [
-            source_note,
-            product_context["category"],
-            instruction,
-        ]
-        if item
-    ][:3]
-    while len(selling_points) < 3:
-        selling_points.append(instruction or product_name)
-    headline = instruction or product_name
-    title = product_name
-    cta = ""
-    structured_payload = legacy_copy_fields_to_payload(
-        LegacyCopyFields(
-            title=title,
-            selling_points=selling_points,
-            poster_headline=headline[:500],
-            cta=cta,
-        ),
+    blocks = [
+        CopyBlock(id="product-name", role="subject", label="商品", text=product_name),
+        *[
+            CopyBlock(id=f"context-{index}", role="context", label=f"上下文 {index}", text=item, priority=index)
+            for index, item in enumerate(
+                [
+                    source_note,
+                    product_context["category"],
+                    instruction,
+                ],
+                start=1,
+            )
+            if item
+        ],
+    ]
+    structured_payload = CopyPayloadV2(
         purpose="workflow_context",
+        summary=instruction or product_name,
+        content=BlocksCopyContent(blocks=blocks),
     )
     copy_set = CopySet(
         product_id=product.id,
         creative_brief_id=None,
         status=CopyStatus.DRAFT,
-        title=title,
-        selling_points=selling_points,
-        poster_headline=headline[:500],
-        cta=cta,
         structured_payload=structured_payload.model_dump(mode="json"),
-        model_title=title,
-        model_selling_points=selling_points,
-        model_poster_headline=headline[:500],
-        model_cta=cta,
         model_structured_payload=structured_payload.model_dump(mode="json"),
         provider_name="workflow_context",
         model_name="product_context",
@@ -128,24 +116,13 @@ def copy_node_output(
     creative_brief_id: str | None,
     manual_edit: bool = False,
 ) -> dict[str, Any]:
-    if isinstance(copy_set.structured_payload, dict):
-        from productflow_backend.application.copy_payloads import normalize_copy_payload
-
-        structured_payload = normalize_copy_payload(copy_set.structured_payload)
-    else:
-        structured_payload = legacy_copy_fields_to_payload(
-            LegacyCopyFields(
-                title=copy_set.title,
-                selling_points=copy_set.selling_points or [],
-                poster_headline=copy_set.poster_headline,
-                cta=copy_set.cta,
-            )
-        )
-    legacy = copy_payload_to_legacy_fields(structured_payload)
+    if not isinstance(copy_set.structured_payload, dict):
+        raise ValueError("文案版本缺少 structured_payload")
+    structured_payload = normalize_copy_payload(copy_set.structured_payload)
     output: dict[str, Any] = {
         "copy_set_id": copy_set.id,
         "creative_brief_id": creative_brief_id,
-        **copy_payload_to_output(structured_payload, legacy),
+        **copy_payload_to_output(structured_payload),
     }
     if manual_edit:
         output["manual_edit"] = True

@@ -53,36 +53,6 @@ class CreativeBriefPayload(BaseModel):
         return _normalize_ai_scalar_text(value, field_name=info.field_name)
 
 
-class LegacyCopyFields(BaseModel):
-    """从 v2 文案派生给旧渲染入口的兼容字段。"""
-
-    title: str = ""
-    selling_points: list[str] = Field(default_factory=list)
-    poster_headline: str = ""
-    cta: str = ""
-
-    @field_validator("title", "poster_headline", "cta", mode="before")
-    @classmethod
-    def normalize_scalar_text(cls, value: Any, info: ValidationInfo) -> Any:
-        """模型偶发把短文本字段输出成字符串数组；只接受纯文本数组并拼成展示字符串。"""
-
-        return _normalize_ai_scalar_text(value, field_name=info.field_name)
-
-
-class CopyPayload(BaseModel):
-    """旧文案生成结果：仅用于历史 payload 归一化和旧测试 fixture。"""
-
-    title: str
-    selling_points: list[str] = Field(min_length=1, max_length=8)
-    poster_headline: str
-    cta: str = ""
-
-    @field_validator("title", "poster_headline", "cta", mode="before")
-    @classmethod
-    def normalize_scalar_text(cls, value: Any, info: ValidationInfo) -> Any:
-        return _normalize_ai_scalar_text(value, field_name=info.field_name)
-
-
 class CopySlotRequest(BaseModel):
     """文案节点可选槽位请求；不等于模型必须生成固定字段。"""
 
@@ -182,7 +152,6 @@ class CopyPayloadV2(BaseModel):
     summary: str
     content: CopyContent = Field(discriminator="kind")
     visual_guidance: VisualGuidance | None = None
-    derived: LegacyCopyFields | None = None
 
     @field_validator("summary")
     @classmethod
@@ -225,9 +194,6 @@ class PosterGenerationInput(BaseModel):
     instruction: str | None = None
     image_size: str | None = None
     tool_options: dict[str, Any] | None = None
-    title: str = ""
-    selling_points: list[str] = Field(default_factory=list)
-    poster_headline: str = ""
-    cta: str = ""
+    structured_copy_context: str | None = None
     source_image: Path | None = None
     reference_images: list[ReferenceImageInput] = Field(default_factory=list)

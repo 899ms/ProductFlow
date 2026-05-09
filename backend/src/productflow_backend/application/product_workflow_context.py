@@ -257,35 +257,12 @@ def collect_incoming_context(
                 context.append_text(node=candidate, label="参考图", text=f"参考图：{label}（角色：{role}{suffix}）")
         if candidate.node_type == WorkflowNodeType.COPY_GENERATION:
             structured_payload = output.get("structured_payload")
-            if isinstance(structured_payload, dict):
-                try:
-                    context.append_text(
-                        node=candidate,
-                        label="文案",
-                        text=copy_payload_context_text(normalize_copy_payload(structured_payload)),
-                    )
-                    continue
-                except ValueError:
-                    pass
-            title = _output_text(output, "title")
-            poster_headline = _output_text(output, "poster_headline")
-            cta = _output_text(output, "cta")
-            selling_points = output.get("selling_points")
-            point_text = ""
-            if isinstance(selling_points, list):
-                point_text = "；".join(
-                    item.strip() for item in selling_points if isinstance(item, str) and item.strip()
-                )
-            copy_parts = [
-                f"标题：{title}" if title else "",
-                f"主标题：{poster_headline}" if poster_headline else "",
-                f"卖点：{point_text}" if point_text else "",
-                f"CTA：{cta}" if cta else "",
-            ]
+            if not isinstance(structured_payload, dict):
+                continue
             context.append_text(
                 node=candidate,
                 label="文案",
-                text="；".join(part for part in copy_parts if part),
+                text=copy_payload_context_text(normalize_copy_payload(structured_payload)),
             )
         elif candidate.node_type == WorkflowNodeType.PRODUCT_CONTEXT:
             product_source_asset_ids = source_asset_ids_from_config(output)

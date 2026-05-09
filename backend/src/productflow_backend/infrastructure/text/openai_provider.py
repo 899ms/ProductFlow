@@ -117,10 +117,9 @@ class OpenAITextProvider(TextProvider):
                         f"目标人群：{brief.audience}\n"
                         f"卖点角度：{', '.join(brief.selling_angles)}\n"
                         f"禁忌表达：{', '.join(brief.taboo_phrases) or '无'}\n"
-                        "请输出 v2 JSON 外壳：version=2、purpose、summary、content、visual_guidance、derived。\n"
+                        "请输出 v2 JSON 外壳：version=2、purpose、summary、content、visual_guidance。\n"
                         "content.kind 必须是 freeform、blocks 或 layout_brief。"
-                        "不要为了满足旧字段编造 CTA、海报标题或固定 3 到 5 条卖点；"
-                        "derived 只是兼容旧渲染入口的可选派生字段。"
+                        "不要为了满足固定字段编造 CTA、海报标题或固定 3 到 5 条卖点。"
                     ),
                 },
             ],

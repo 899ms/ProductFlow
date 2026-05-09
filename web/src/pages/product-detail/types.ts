@@ -59,9 +59,5 @@ export type NodeConfigDraft = {
   channel: string;
   size: string;
   toolOptions: ImageToolOptions;
-  copyTitle: string;
-  copySellingPoints: string;
-  copyPosterHeadline: string;
-  copyCta: string;
   copyStructuredPayload: CopyPayloadV2 | null;
 };

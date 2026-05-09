@@ -102,7 +102,7 @@ Put workflow rules and orchestration in `backend/src/productflow_backend/applica
 - `application/image_sessions.py` owns continuous image-session behavior, including building provider context,
   trimming title text, attaching generated assets back to products, and deleting session storage.
 - `application/contracts.py` contains Pydantic contracts shared with providers/renderers, such as
-  `ProductInput`, `CreativeBriefPayload`, `CopyPayload`, and `PosterGenerationInput`.
+  `ProductInput`, `CreativeBriefPayload`, `CopyPayloadV2`, and `PosterGenerationInput`.
 - `application/time.py` is the shared application timestamp helper for timezone-aware UTC values.
 - `application/queue_submission.py` owns the small shared helper for "durable row persisted, queue delivery failed"
   handling. Submit use cases use it to mark the persisted task failed and raise `QueueUnavailableError`.

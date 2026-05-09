@@ -61,6 +61,24 @@ def _draw_wrapped_text(
         cursor_y += line_height + line_spacing
 
 
+def _structured_context_lines(payload: PosterGenerationInput) -> list[str]:
+    return [line.strip() for line in (payload.structured_copy_context or "").splitlines() if line.strip()]
+
+
+def _headline_from_payload(payload: PosterGenerationInput) -> str:
+    lines = _structured_context_lines(payload)
+    if lines:
+        return lines[0].removeprefix("摘要：")
+    return payload.product_name
+
+
+def _points_from_payload(payload: PosterGenerationInput) -> list[str]:
+    lines = _structured_context_lines(payload)
+    if len(lines) > 1:
+        return lines[1:4]
+    return []
+
+
 class PosterRenderer:
     def __init__(self, font_path: Path | None = None) -> None:
         self.font_path = font_path or get_runtime_settings().poster_font_path
@@ -93,12 +111,12 @@ class PosterRenderer:
 
         _draw_wrapped_text(
             draw,
-            payload.poster_headline,
+            _headline_from_payload(payload),
             headline_font,
             (70, 36, 830, 150),
             (255, 255, 255),
         )
-        for index, point in enumerate(payload.selling_points[:3]):
+        for index, point in enumerate(_points_from_payload(payload)[:3]):
             top = 880 + index * 54
             draw.rounded_rectangle((70, top, 1010, top + 40), radius=20, fill=(244, 75, 74, 255))
             _draw_wrapped_text(draw, point, tag_font, (96, top + 5, 980, top + 34), (255, 255, 255))
@@ -121,15 +139,15 @@ class PosterRenderer:
         body_font = _load_font(self.font_path, 36)
         cta_font = _load_font(self.font_path, 42)
 
-        _draw_wrapped_text(draw, payload.poster_headline, title_font, (70, 60, 700, 250), (255, 255, 255))
-        _draw_wrapped_text(draw, payload.title, body_font, (70, 260, 700, 340), (230, 230, 230))
+        _draw_wrapped_text(draw, _headline_from_payload(payload), title_font, (70, 60, 700, 250), (255, 255, 255))
+        _draw_wrapped_text(draw, payload.product_name, body_font, (70, 260, 700, 340), (230, 230, 230))
 
         if payload.source_image is not None:
             product_img = _fit_source_image(payload.source_image, (700, 640))
             canvas.alpha_composite(product_img, (190, 560))
 
         base_y = 1130
-        for index, point in enumerate(payload.selling_points[:3]):
+        for index, point in enumerate(_points_from_payload(payload)[:3]):
             draw.rounded_rectangle(
                 (120, base_y + index * 62, 960, base_y + index * 62 + 46),
                 radius=24,
@@ -144,5 +162,11 @@ class PosterRenderer:
             )
 
         draw.rounded_rectangle((120, 1280, 960, 1360), radius=34, fill=(244, 75, 74, 255))
-        _draw_wrapped_text(draw, payload.cta, cta_font, (180, 1298, 910, 1346), (255, 255, 255))
+        _draw_wrapped_text(
+            draw,
+            payload.instruction or "生成图片",
+            cta_font,
+            (180, 1298, 910, 1346),
+            (255, 255, 255),
+        )
         return canvas

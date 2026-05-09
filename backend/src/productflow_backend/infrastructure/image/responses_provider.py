@@ -775,10 +775,6 @@ class OpenAIResponsesImageProvider(ImageProvider):
                 "price": poster.price or "",
                 "source_note": poster.source_note or "",
                 "instruction": poster.instruction or "自由生成。",
-                "poster_headline": poster.poster_headline,
-                "title": poster.title,
-                "selling_points": "；".join(poster.selling_points[:3]),
-                "cta": poster.cta,
                 "context_block": context_block,
                 "reference_policy": self.poster_image_reference_policy if poster_has_reference_input(poster) else "",
                 "size": size,
@@ -798,16 +794,8 @@ class OpenAIResponsesImageProvider(ImageProvider):
             lines.append(f"- 价格：{poster.price}")
         if poster.source_note:
             lines.append(f"- 补充说明：{poster.source_note}")
-        if poster.copy_prompt_mode == "copy" and (
-            poster.poster_headline or poster.title or poster.selling_points or poster.cta
-        ):
-            copy_parts = [
-                f"标题：{poster.title}" if poster.title else "",
-                f"主标题：{poster.poster_headline}" if poster.poster_headline else "",
-                f"要点：{'；'.join(poster.selling_points[:3])}" if poster.selling_points else "",
-                f"CTA：{poster.cta}" if poster.cta else "",
-            ]
-            lines.append(f"- 文案：{'；'.join(part for part in copy_parts if part)}")
+        if poster.copy_prompt_mode == "copy" and poster.structured_copy_context:
+            lines.append(f"- 结构化文案：\n{poster.structured_copy_context}")
         if poster.reference_images or poster.source_image is not None:
             reference_paths = {str(reference.path.resolve()) for reference in poster.reference_images}
             if poster.source_image is not None:
