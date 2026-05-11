@@ -1586,6 +1586,8 @@ def test_product_context_ignores_unresolved_placeholder_values(
     assert not any("{source_note}" in source["text"] for source in image_output["context_sources"])
     assert len(captured_inputs) == 1
     provider_input = captured_inputs[0]
+    assert image_output["context_summary"]["copy_prompt_mode"] == "image_edit"
+    assert provider_input.copy_prompt_mode == "image_edit"
     assert provider_input.product_name == "测试手机壳"
     assert provider_input.category is None
     assert provider_input.price is None
@@ -1812,6 +1814,7 @@ def test_image_generation_collects_product_context_through_upstream_copy_edge(
     )
     assert len(captured_inputs) == 1
     provider_input = captured_inputs[0]
+    assert provider_input.copy_prompt_mode == "copy"
     assert provider_input.product_name == "折叠露营椅"
     assert provider_input.category == "户外家具"
     assert provider_input.price == "129"

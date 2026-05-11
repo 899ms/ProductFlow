@@ -139,7 +139,7 @@ def execute_workflow_image_generation(
         resolve_storage_path=storage.resolve,
     )
     render_input = PosterGenerationInput(
-        copy_prompt_mode="copy" if has_linked_copy_input else "image_edit",
+        copy_prompt_mode="copy" if structured_copy_context else "image_edit",
         product_name=product_context["name"] or "",
         category=product_context["category"],
         price=product_context["price"],
