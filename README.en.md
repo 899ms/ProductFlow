@@ -5,45 +5,74 @@
 # ProductFlow
 
 [中文](README.md) | English
+<p align="center">
+  <a href="https://draw.devbin.de"><strong>Live Demo / 体验站</strong></a>
+</p>
 
-ProductFlow is an open-source, self-hosted product creative workspace for solo merchants and small teams. It brings product information, AI copywriting, reference images, AI/template posters, iterative image sessions, and a visual product workflow into one private deployment so operators can turn a single product into reusable ecommerce assets faster.
+ProductFlow is an open-source, self-hosted product creative workspace for solo merchants and small teams. Its core flow covers product information, reference images, AI copywriting, AI/template posters, iterative image sessions, a generated image gallery, and a visual workflow.
 
-This repository is not a multi-tenant SaaS product and does not include hosted service accounts. A self-hosted deployment requires you to provide PostgreSQL, Redis, the backend, the worker, the frontend, and usable text/image model providers.
+The current form is a private single-admin instance. A self-hosted deployment requires PostgreSQL, Redis, the backend API, Dramatiq worker, Web frontend, and usable text/image model providers.
 
-## Current Feature Status
+## Feature Overview
 
-Implemented and visible in the codebase:
+### Products / Workbench
 
 - Single-admin access-key login with Cookie session access to backend APIs.
 - Product list, paginated browsing, product creation, product detail workbench, and product deletion protected by a global switch.
-![Product creation list example](images/preview1.png)
+- Node canvas for product information, reference images, copy nodes, and image-generation nodes.
+- Canvas interactions: mouse-wheel zoom, drag panning on blank canvas, node dragging, node connections, edge deletion, Ctrl/Cmd/Shift multi-select, and Shift box selection.
+- Full-canvas templates for product creation; built-in node-group templates and user node-group templates for adding flows inside the workbench.
+- Product source images, reference images, and iterative image-session references support click-to-select and drag-and-drop upload, protected by MIME, size, pixel, and count limits.
+- Reference image nodes are single-image slots. Manual upload or upstream generation replaces the current image, while old assets stay in product history/assets.
+- Copy nodes support generation, editing, confirmation, and history; current outputs are editable structured copy used by later image generation.
+- Image-generation nodes only trigger and configure generation; results are written into connected downstream reference image nodes and previewed/downloaded from the reference image or Images sidebar.
 
-- ProductFlow workbench: the product detail page organizes product information, reference images, copy, and image-generation flow on a node canvas.
-- Canvas interactions: mouse-wheel zoom, left-drag panning on blank canvas, node dragging, edge creation by dragging connections, edge deletion, and remembered right-side panel width.
+### Text / Image Generation
+
+- Standalone image sessions support reference uploads, base image selection from history, iterative generation, multiple-candidate comparison, and a mobile single-column layout.
+- Running state includes queue position, lightweight status refresh, candidate progress, failure reasons, cancel, and retry.
+- Generated images can be downloaded, sent to the gallery, saved as product reference images, or saved as product main-image references.
+
+### Gallery
+
+- `/gallery` centrally stores generated image results.
+- Entries keep source session, linked product, prompt, size, model, and download entrypoint.
+
+### Configuration and Runtime
+
+- `/settings` supports runtime business overrides: provider, model, image size, image tool parameters, prompt templates, upload limits, global concurrency, business deletion switch, and more.
+- Image tool parameters can control advanced fields sent to the Responses `image_generation` tool, including allowed fields, quality, output format, compression, background, moderation, action, input fidelity, partial images, and provider `n`. Responses background mode is enabled by default and falls back to synchronous requests when unsupported.
+- Secret fields are not echoed back. The settings page is protected by an independent `SETTINGS_ACCESS_TOKEN` secondary unlock.
+- Copy, poster, product workflow, and iterative image generation are dispatched through Dramatiq + Redis, with PostgreSQL as state storage.
+- API/worker startup recovers unfinished copy/poster jobs, product workflows, and iterative image tasks.
+- Running product workflows and iterative image generation only poll lightweight status responses, then refresh full details after completion.
+
+### In-Product Help
+
+- The top navigation provides a `/help` page.
+- Help is organized by real product areas: getting started, canvas workbench, gallery, text/image generation, and settings.
+- The help page includes left-side page navigation, a local table of contents, previous/next links, and local full-text search.
+
+### Preview
+
+![Product list example](images/preview1.png)
+
 ![Product workbench example](images/preview2.png)
-- Product source images, reference images, and iterative image-session references support click-to-select and drag-and-drop upload, with MIME, size, pixel, and count limits.
-- Reference image nodes are single-image slots: manual upload or upstream image generation replaces the current image, while older assets remain in the product history/asset list.
-- Copy generation, copy editing, copy confirmation, and copy history viewing; copy nodes can edit title, selling points, poster headline, and CTA.
-- Image-generation nodes are trigger/configuration nodes and do not directly hold images; generated results are written into connected downstream reference image nodes and can be previewed/downloaded from the reference image or Images sidebar.
-- Two poster output modes: local Pillow template rendering and remote image-provider generation.
-- Poster download, poster regeneration, product history timeline, and a right-side Images panel that aggregates downloadable assets.
-- Standalone image sessions: upload reference images, generate images iteratively, and attach generated images back to products.
-- Standalone image sessions support durable async generation tasks, queue position, lightweight status refresh, multiple candidates, and a single-column mobile workflow.
-- Generated image gallery: iterative image results can be saved to `/gallery` for centralized source, prompt, size, model, and download browsing.
-- Prompt configuration: the settings page can override default prompt templates for product understanding, copy generation, workbench image generation, and iterative image generation.
-![Product workbench example](images/preview3.png)
-![Product workbench example](images/preview4.png)
-- Runtime settings page: provider, model, image size, upload limits, job retry, business deletion switch, and other business configuration can be overridden in the database; secrets are not echoed back.
-- Async jobs: Dramatiq + Redis for dispatch, PostgreSQL for state, and startup recovery for unfinished product workflows and iterative image-generation tasks.
-- Lightweight polling while running: active iterative image generation and product workflows poll status responses only, then refresh full details after completion to reduce frontend rendering and backend serialization load.
 
-Still out of scope: multi-user/multi-tenant support, team permissions, payments, hosted account systems, automatic ad placement/listing, video generation, Kubernetes/Helm/released container images, and other production orchestration packages. The in-repository Docker Compose self-hosting path is available.
+![Workbench Images panel example](images/preview3.png)
+
+![Generated result example](images/preview4.png)
+
+## Current Boundaries
+
+ProductFlow does not currently provide multi-user/multi-tenant support, team permissions, payments, hosted account systems, automatic ad placement/listing, video generation, Kubernetes/Helm/released container images, or other production orchestration packages. The in-repository Docker Compose self-hosting path is available.
 
 ## Product Entry Points and Docs
 
-- New user guide: `docs/USER_GUIDE.en.md`
+- In-product help: top navigation **Help**, route `/help`
+- New user guide reference: `docs/USER_GUIDE.en.md`
 - Architecture guide: `docs/ARCHITECTURE.en.md`
-- Current architecture health review: `docs/architecture-health-review.en.md`
+- Current architecture health review: `docs/ARCHITECTURE_HEALTH_REVIEW.en.md`
 - Roadmap: `docs/ROADMAP.en.md`
 - Version history: `CHANGELOG.md`
 - Brand assets: `docs/assets/productflow-brand-concept.png`, `docs/assets/productflow-mark.svg`
@@ -54,7 +83,7 @@ Still out of scope: multi-user/multi-tenant support, team permissions, payments,
 - Backend: Python 3.12, FastAPI, SQLAlchemy, Alembic, Dramatiq, Redis, PostgreSQL, Pillow, OpenAI Python SDK.
 - Frontend: React 19, Vite, TypeScript, React Router, TanStack Query, Tailwind CSS 4.
 - Local development entrypoint: root `justfile`; if `just` is unavailable, raw commands are listed below.
-- Docs: `docs/PRD.en.md`, `docs/USER_GUIDE.en.md`, `docs/ARCHITECTURE.en.md`, `docs/ROADMAP.en.md`, `CHANGELOG.md`.
+- Docs: `docs/PRD.en.md`, `docs/USER_GUIDE.en.md`, `docs/ARCHITECTURE.en.md`, `docs/ARCHITECTURE_HEALTH_REVIEW.en.md`, `docs/ROADMAP.en.md`, `CHANGELOG.md`.
 
 ## Open Source Dependencies and Thanks
 
@@ -111,6 +140,8 @@ ProductFlow/
     USER_GUIDE.en.md
     ARCHITECTURE.md
     ARCHITECTURE.en.md
+    ARCHITECTURE_HEALTH_REVIEW.md
+    ARCHITECTURE_HEALTH_REVIEW.en.md
     ROADMAP.md
     ROADMAP.en.md
     assets/
@@ -327,7 +358,7 @@ Default development ports come from `.env.dev.example`:
 - API: `http://localhost:29282`
 - Web: `http://localhost:29283`
 
-Open the Web page and log in with `ADMIN_ACCESS_KEY`. After login, you can create a product from **Products / Workbench**, then use the product detail workbench to fill product details, generate copy, and generate images.
+Open the Web page and log in with `ADMIN_ACCESS_KEY`. The top navigation provides **Products / Workbench**, **Image chat**, **Gallery**, **Help**, and **Settings**.
 
 ### 6. Development health check
 
@@ -359,7 +390,8 @@ Image providers:
 
 - `IMAGE_PROVIDER_KIND=mock`: local fake image implementation.
 - `IMAGE_PROVIDER_KIND=openai_responses`: OpenAI Responses `image_generation` tool with reference image input. ProductFlow's current iterative image branch context is determined by the base image and reference images explicitly selected by the user; it does not automatically send the entire historical image chain to the provider.
-- Related variables: `IMAGE_API_KEY`, `IMAGE_BASE_URL`, `IMAGE_GENERATE_MODEL`, `IMAGE_MAIN_IMAGE_SIZE`, `IMAGE_PROMO_POSTER_SIZE`, `IMAGE_ALLOWED_SIZES`.
+- Related variables: `IMAGE_API_KEY`, `IMAGE_BASE_URL`, `IMAGE_GENERATE_MODEL`, `IMAGE_RESPONSES_BACKGROUND_ENABLED`, `IMAGE_GENERATION_MAX_DIMENSION`, `IMAGE_MAIN_IMAGE_SIZE`, `IMAGE_PROMO_POSTER_SIZE`.
+- Advanced tool parameters: `IMAGE_TOOL_ALLOWED_FIELDS` controls which tool fields the frontend can show, the backend can persist, and the provider request can include. Optional defaults also include `IMAGE_TOOL_MODEL`, `IMAGE_TOOL_QUALITY`, `IMAGE_TOOL_OUTPUT_FORMAT`, `IMAGE_TOOL_OUTPUT_COMPRESSION`, `IMAGE_TOOL_BACKGROUND`, `IMAGE_TOOL_MODERATION`, `IMAGE_TOOL_ACTION`, `IMAGE_TOOL_INPUT_FIDELITY`, `IMAGE_TOOL_PARTIAL_IMAGES`, and `IMAGE_TOOL_N`.
 
 Poster modes:
 
@@ -404,8 +436,12 @@ The backend exposes REST APIs only. Main entrypoints include:
 - `/api/image-sessions`, `/api/image-sessions/{image_session_id}`, `/api/image-sessions/{image_session_id}/status`, `/api/image-session-assets/{asset_id}/download`
 - `/api/gallery`
 - `/api/generation-queue`
-- `/api/products/{product_id}/workflow`, `/api/products/{product_id}/workflow/status`, `/api/products/{product_id}/workflow/run`, `/api/workflow-nodes/{node_id}`, `/api/workflow-edges/{edge_id}`
+- `/api/products/{product_id}/workflow`, `/api/products/{product_id}/workflow/status`, `/api/products/{product_id}/workflow/run`, `/api/products/{product_id}/workflow/runs/{run_id}/cancel`
+- `/api/workflow/canvas-templates`, `/api/workflow/user-template-groups`
+- `/api/workflow-nodes/{node_id}`, `/api/workflow-edges/{edge_id}`
 - `/api/settings`, `/api/settings/lock-state`, `/api/settings/unlock`, `/api/settings/runtime`
+
+This list contains common resource entrypoints, not a complete OpenAPI reference. Operation endpoints also include iterative image generate/cancel/retry/save-to-gallery, workflow retry, template insertion, and user-template management.
 
 ## Open Source and Security Boundaries
 

@@ -2,7 +2,7 @@
 
 [中文](ARCHITECTURE.md) | English
 
-[Current architecture health, completed cleanup, and remaining risks are tracked in `docs/architecture-health-review.en.md`; this document stays focused on system structure.]
+Current architecture health, completed cleanup, and remaining risks are tracked in `docs/ARCHITECTURE_HEALTH_REVIEW.en.md`; this document stays focused on system structure.
 
 ## 1. System Overview
 
