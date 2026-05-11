@@ -160,8 +160,10 @@ def test_prompt_settings_reach_provider_prompt_builders(configured_env: Path, mo
     brief, _ = text_provider.generate_brief(product_input)
     text_provider.generate_copy(product_input, brief)
 
-    assert text_calls[0]["input"][0]["content"] == "自定义商品理解提示"
-    assert text_calls[1]["input"][0]["content"] == "自定义文案提示"
+    assert text_calls[0]["instructions"] == "自定义商品理解提示"
+    assert text_calls[0]["input"][0]["role"] == "user"
+    assert text_calls[1]["instructions"] == "自定义文案提示"
+    assert text_calls[1]["input"][0]["role"] == "user"
 
     source_path = configured_env / "prompt-provider-source.png"
     source_path.parent.mkdir(parents=True, exist_ok=True)

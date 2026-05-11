@@ -54,11 +54,8 @@ class OpenAITextProvider(TextProvider):
     def generate_brief(self, product: ProductInput) -> tuple[CreativeBriefPayload, str]:
         response = self.client.responses.create(
             model=self.brief_model,
+            instructions=text_or_default(self.brief_system_prompt, "请输出简洁、结构化的中文 JSON。"),
             input=[
-                {
-                    "role": "system",
-                    "content": text_or_default(self.brief_system_prompt, "请输出简洁、结构化的中文 JSON。"),
-                },
                 {
                     "role": "user",
                     "content": (
@@ -94,11 +91,8 @@ class OpenAITextProvider(TextProvider):
         reference_text = "\n".join(reference_lines) if reference_lines else "未连接"
         response = self.client.responses.create(
             model=self.copy_model,
+            instructions=text_or_default(self.copy_system_prompt, "请输出中文 JSON，不要输出 markdown。"),
             input=[
-                {
-                    "role": "system",
-                    "content": text_or_default(self.copy_system_prompt, "请输出中文 JSON，不要输出 markdown。"),
-                },
                 {
                     "role": "user",
                     "content": (
