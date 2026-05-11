@@ -1,6 +1,7 @@
 # ProductFlow Architecture
 
 [中文](ARCHITECTURE.md) | [English](ARCHITECTURE.en.md)
+
 当前架构健康度、已完成治理和剩余风险见 `docs/ARCHITECTURE_HEALTH_REVIEW.md`；本文保持为系统结构说明。
 
 ## 1. 系统概览
@@ -43,8 +44,8 @@ React/Vite web
 
 前端代码位于 `web/src/`：
 
-- `pages/`：登录、商品列表、创建商品、商品详情、画廊、帮助、设置、图片会话页面（当前路由为 `/image-chat` 和
-  `/products/:productId/image-chat`）。
+- `pages/`：登录、商品列表、创建商品、商品详情、画廊、帮助、设置、图片会话页面（当前路由包括 `/image-chat`、
+  `/products/:productId/image-chat`、`/gallery`、`/help` 和 `/settings`）。
 - `components/`：共享 UI，如顶栏、状态标签和图片拖拽上传区。
 - `lib/api.ts`：集中封装 REST API 请求。
 - `lib/types.ts`：前端 DTO 类型，需与后端 schemas 保持一致。
