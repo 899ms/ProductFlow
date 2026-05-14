@@ -1,4 +1,4 @@
-import type { WorkflowEdge, WorkflowNode, WorkflowNodeType } from "../../lib/types";
+import type { ProductWorkflow, WorkflowEdge, WorkflowNode, WorkflowNodeType } from "../../lib/types";
 
 export interface WorkflowHistoryPoint {
   x: number;
@@ -82,6 +82,12 @@ export function sanitizeRestorableNodeConfig(config: Record<string, unknown>): R
 
 export function workflowHistoryStepRequiresConfirmation(step: WorkflowHistoryStep): boolean {
   return step.kind === "deleteNodes" || step.kind === "deleteEdges";
+}
+
+export function getWorkflowStructureSignature(workflow: ProductWorkflow): string {
+  const nodeIds = workflow.nodes.map((node) => node.id).sort().join(",");
+  const edgeIds = workflow.edges.map((edge) => edge.id).sort().join(",");
+  return [workflow.id, workflow.updated_at, nodeIds, edgeIds].join("|");
 }
 
 export function getInternalWorkflowEdges(edges: WorkflowEdge[], nodeIds: Set<string>): WorkflowEdge[] {

@@ -28,6 +28,7 @@ describe("workflow keyboard shortcut helpers", () => {
     expect(isWorkflowShortcutBlockedTarget(shortcutTarget({ tagName: "textarea" }))).toBe(true);
     expect(isWorkflowShortcutBlockedTarget(shortcutTarget({ tagName: "SELECT" }))).toBe(true);
     expect(isWorkflowShortcutBlockedTarget(shortcutTarget({ tagName: "button" }))).toBe(true);
+    expect(isWorkflowShortcutBlockedTarget(shortcutTarget({ tagName: "A" }))).toBe(true);
     expect(isWorkflowShortcutBlockedTarget(shortcutTarget({ tagName: "LABEL" }))).toBe(true);
     expect(isWorkflowShortcutBlockedTarget(shortcutTarget({ isContentEditable: true }))).toBe(true);
     expect(
@@ -35,6 +36,28 @@ describe("workflow keyboard shortcut helpers", () => {
         closest: (selector: string) => (selector.includes("input") ? {} : null),
       })),
     ).toBe(true);
+  });
+
+  it("ignores shortcuts from nested anchors and role buttons", () => {
+    expect(
+      isWorkflowShortcutBlockedTarget(shortcutTarget({
+        closest: (selector: string) => (selector.split(",").includes("a") ? {} : null),
+      })),
+    ).toBe(true);
+    expect(
+      isWorkflowShortcutBlockedTarget(shortcutTarget({
+        closest: (selector: string) => (selector.includes("[role='button']") ? {} : null),
+      })),
+    ).toBe(true);
+    expect(
+      getWorkflowKeyboardShortcut(
+        keyboardEvent({
+          key: "c",
+          ctrlKey: true,
+          target: shortcutTarget({ tagName: "A" }),
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("maps canvas shortcuts while ignoring ordinary keys", () => {

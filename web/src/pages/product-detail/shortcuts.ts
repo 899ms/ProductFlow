@@ -22,9 +22,11 @@ const SHORTCUT_BLOCKED_SELECTOR = [
   "textarea",
   "select",
   "button",
+  "a",
   "label",
   "[contenteditable]",
   "[role='textbox']",
+  "[role='button']",
   "[data-workflow-shortcut-ignore]",
 ].join(",");
 
@@ -37,7 +39,7 @@ export function isWorkflowShortcutBlockedTarget(target: EventTarget | null): boo
     return true;
   }
   const tagName = typeof element.tagName === "string" ? element.tagName.toLowerCase() : "";
-  if (["input", "textarea", "select", "button", "label"].includes(tagName)) {
+  if (["input", "textarea", "select", "button", "a", "label"].includes(tagName)) {
     return true;
   }
   if (typeof element.getAttribute === "function") {

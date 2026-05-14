@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -8,12 +8,15 @@ import {
   CircleDot,
   Check,
   Eye,
+  Hand,
   Save,
   Image as ImageIcon,
   Layers3,
   Loader2,
   Maximize2,
   Minimize2,
+  MousePointer2,
+  Move,
   Play,
   Plus,
   Settings2,
@@ -23,6 +26,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Drawer } from "vaul";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { TopNav } from "../components/TopNav";
@@ -43,6 +47,7 @@ import {
   CANVAS_MIN_WIDTH,
   MAX_INSPECTOR_WIDTH,
   MIN_INSPECTOR_WIDTH,
+  NODE_WIDTH,
 } from "./product-detail/constants";
 import { buildEdgePath } from "./product-detail/canvasUtils";
 import { ImagePreviewModal } from "./product-detail/ImagePreviewModal";
@@ -72,13 +77,14 @@ import {
 import {
   createRestoreEdgesStep,
   createRestoreNodesStep,
+  getWorkflowStructureSignature,
   getInternalWorkflowEdges,
   workflowHistoryStepRequiresConfirmation,
   workflowEdgeToRestorableEdge,
 } from "./product-detail/workflowHistory";
 import type { WorkflowHistoryStep } from "./product-detail/workflowHistory";
 import { connectionDescription, localizedWorkflowNodeTypeLabel } from "./product-detail/nodeDisplay";
-import type { NodeConfigDraft, SaveStatus } from "./product-detail/types";
+import type { CanvasInteractionMode, NodeConfigDraft, SaveStatus } from "./product-detail/types";
 import {
   clamp,
   getWorkflowNodeCancelableRun,
@@ -132,6 +138,7 @@ export function ProductDetailPage() {
   const previousBodyUserSelectRef = useRef<string | null>(null);
   const workflowCanvasRef = useRef<WorkflowCanvasMutationBridge | null>(null);
   const wasWorkflowActiveRef = useRef(false);
+  const workflowHistorySignatureRef = useRef<string | null>(null);
   const draftVersionRef = useRef(0);
   const previousDraftNodeIdRef = useRef<string | null>(null);
   const skipNextCanvasBlankClickRef = useRef(false);
@@ -147,6 +154,7 @@ export function ProductDetailPage() {
       }
     >
   >({});
+  const mobileInitialCanvasViewRef = useRef("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [templateSaveTitle, setTemplateSaveTitle] = useState("");
@@ -155,6 +163,11 @@ export function ProductDetailPage() {
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("details");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [topChromeCollapsed, setTopChromeCollapsed] = useState(false);
+  const [mobileDetailsSheetOpen, setMobileDetailsSheetOpen] = useState(false);
+  const [mobileCanvasMode, setMobileCanvasMode] = useState<CanvasInteractionMode>("browse");
+  const [mobileCanvasControlsActive, setMobileCanvasControlsActive] = useState(() =>
+    typeof window === "undefined" ? false : window.matchMedia("(max-width: 1023px)").matches,
+  );
   const [draft, setDraft] = useState<NodeConfigDraft>(() =>
     draftFromNode(null),
   );
@@ -226,14 +239,41 @@ export function ProductDetailPage() {
     workflow?.nodes.find((node) => node.id === selectedNodeId) ??
     workflow?.nodes[0] ??
     null;
+  const workflowStructureSignature = useMemo(
+    () => (workflow ? getWorkflowStructureSignature(workflow) : null),
+    [workflow],
+  );
 
-  useEffect(() => {
+  const clearWorkflowLocalHistory = useCallback(() => {
     workflowClipboardRef.current = null;
     undoStackRef.current = [];
     redoStackRef.current = [];
     pendingMoveGroupsRef.current = {};
     setPendingHistoryAction(null);
-  }, [productId, workflow?.id]);
+  }, []);
+
+  useEffect(() => {
+    clearWorkflowLocalHistory();
+    workflowHistorySignatureRef.current = workflowStructureSignature;
+  }, [clearWorkflowLocalHistory, productId, workflow?.id]);
+
+  useEffect(() => {
+    if (!workflowStructureSignature) {
+      if (workflowHistorySignatureRef.current !== null) {
+        clearWorkflowLocalHistory();
+      }
+      workflowHistorySignatureRef.current = null;
+      return;
+    }
+    if (workflowHistorySignatureRef.current === null) {
+      workflowHistorySignatureRef.current = workflowStructureSignature;
+      return;
+    }
+    if (workflowHistorySignatureRef.current !== workflowStructureSignature) {
+      clearWorkflowLocalHistory();
+      workflowHistorySignatureRef.current = workflowStructureSignature;
+    }
+  }, [clearWorkflowLocalHistory, workflowStructureSignature]);
 
   useEffect(() => {
     if (!workflow?.nodes.length) {
@@ -348,6 +388,14 @@ export function ProductDetailPage() {
     }
   }, [workflowActive]);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 1023px)");
+    const syncMobileCanvasControls = () => setMobileCanvasControlsActive(mediaQuery.matches);
+    syncMobileCanvasControls();
+    mediaQuery.addEventListener("change", syncMobileCanvasControls);
+    return () => mediaQuery.removeEventListener("change", syncMobileCanvasControls);
+  }, []);
+
   const handleDraftChange = (nextDraft: NodeConfigDraft) => {
     draftVersionRef.current += 1;
     setDraft(nextDraft);
@@ -414,7 +462,8 @@ export function ProductDetailPage() {
   };
 
   const selectNodeFromPointer = (nodeId: string, event: ReactPointerEvent | ReactMouseEvent) => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
+    const mobileSelectionMode = mobileCanvasControlsActive && mobileCanvasMode === "select";
+    if (event.ctrlKey || event.metaKey || event.shiftKey || mobileSelectionMode) {
       toggleNodeSelectionForDetails(nodeId);
       return;
     }
@@ -458,6 +507,9 @@ export function ProductDetailPage() {
       return;
     }
     clearMultiSelection();
+    if (mobileCanvasControlsActive && mobileCanvasMode === "select") {
+      setMobileCanvasMode("browse");
+    }
   };
 
   const replaceSelectionFromBox = (nodeIds: string[]) => {
@@ -487,6 +539,7 @@ export function ProductDetailPage() {
     queryClient.getQueryData<ProductWorkflow>(["product-workflow", productId]) ?? workflow ?? null;
 
   const setWorkflowCache = (nextWorkflow: ProductWorkflow) => {
+    workflowHistorySignatureRef.current = getWorkflowStructureSignature(nextWorkflow);
     queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
   };
 
@@ -771,7 +824,7 @@ export function ProductDetailPage() {
     },
     onSuccess: (nextWorkflow) => {
       setError("");
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      setWorkflowCache(nextWorkflow);
       const newest = [...nextWorkflow.nodes].sort(
         (a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -807,7 +860,7 @@ export function ProductDetailPage() {
     },
     onSuccess: async ({ nextWorkflow, previousNodeIds }) => {
       setError("");
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      setWorkflowCache(nextWorkflow);
       await queryClient.invalidateQueries({ queryKey: ["product-workflow", productId] });
       const createdNodes = nextWorkflow.nodes.filter((node) => !previousNodeIds.has(node.id));
       const selectedCreatedNode =
@@ -1007,6 +1060,7 @@ export function ProductDetailPage() {
       }
       setError("");
       const updatedNode = nextWorkflow.nodes.find((node) => node.id === input.node.id);
+      workflowHistorySignatureRef.current = getWorkflowStructureSignature(nextWorkflow);
       queryClient.setQueryData<ProductWorkflow>(
         ["product-workflow", productId],
         (current) => {
@@ -1043,10 +1097,7 @@ export function ProductDetailPage() {
         return;
       }
       if (context?.previous) {
-        queryClient.setQueryData(
-          ["product-workflow", productId],
-          context.previous,
-        );
+        setWorkflowCache(context.previous);
       }
       workflowCanvasRef.current.clearOptimisticNodePosition(_input.node.id);
       delete pendingMoveGroupsRef.current[_input.moveGroupId];
@@ -1083,7 +1134,7 @@ export function ProductDetailPage() {
         .map((edge) => edge.id);
       setError("");
       setNotice(source && target ? connectionDescription(source, target, t) : "");
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      setWorkflowCache(nextWorkflow);
       pushUndoStep({ kind: "deleteEdges", edgeIds: createdEdgeIds });
       setSelectedNodeIds(clearSelectedNodeGroup(selectedNodeId));
     },
@@ -1112,7 +1163,7 @@ export function ProductDetailPage() {
     onSuccess: ({ nextWorkflow, restoreStep }) => {
       setError("");
       setNotice("");
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      setWorkflowCache(nextWorkflow);
       pushUndoStep(restoreStep);
       setSelectedNodeIds(clearSelectedNodeGroup(selectedNodeId));
     },
@@ -1141,7 +1192,7 @@ export function ProductDetailPage() {
     onSuccess: ({ nextWorkflow, nodeId, restoreStep }) => {
       setError("");
       setPendingDeleteAction(null);
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      setWorkflowCache(nextWorkflow);
       pushUndoStep(restoreStep);
       const fallbackPrimaryNodeId = selectedNodeId === nodeId ? nextWorkflow.nodes[0]?.id ?? null : selectedNodeId;
       const nextSelection = deleteNodeFromSelection(selectedNodeIds, nodeId, fallbackPrimaryNodeId);
@@ -1185,7 +1236,7 @@ export function ProductDetailPage() {
     onSuccess: ({ nextWorkflow, restoreStep }) => {
       setError("");
       setPendingDeleteAction(null);
-      queryClient.setQueryData(["product-workflow", productId], nextWorkflow);
+      setWorkflowCache(nextWorkflow);
       pushUndoStep(restoreStep);
       const nextPrimaryNodeId = nextWorkflow.nodes[0]?.id ?? null;
       setSelectedNodeId(nextPrimaryNodeId);
@@ -1440,6 +1491,7 @@ export function ProductDetailPage() {
     onSelectionBoxComplete: replaceSelectionFromBox,
     onNodePositionCommit: commitNodePosition,
     onConnectionCreate: (input) => createEdgeMutation.mutate(input),
+    mobileInteractionMode: mobileCanvasControlsActive ? mobileCanvasMode : "edit",
   });
   workflowCanvasRef.current = workflowCanvas;
   const {
@@ -1449,6 +1501,7 @@ export function ProductDetailPage() {
     nodeDrag,
     connectionDrag,
     panePan,
+    pinchZooming,
     selectionBoxRect,
     previewSelectedNodeIds,
     updateZoom,
@@ -1463,6 +1516,7 @@ export function ProductDetailPage() {
     movePanePan,
     endPanePan,
     cancelPanePan,
+    leavePanePan,
     handleCanvasWheel,
     startNodeDrag,
     moveNodeDrag,
@@ -1471,6 +1525,7 @@ export function ProductDetailPage() {
     startConnectionDrag,
     moveConnectionDrag,
     endConnectionDrag,
+    cancelConnectionDrag,
   } = workflowCanvas;
 
   useEffect(() => {
@@ -1555,6 +1610,38 @@ export function ProductDetailPage() {
     t,
     workflow,
   ]);
+
+  useEffect(() => {
+    const scrollElement = canvasScrollRef.current;
+    if (!scrollElement || !workflow?.nodes.length || !selectedNode) {
+      return;
+    }
+    if (!mobileCanvasControlsActive) {
+      return;
+    }
+
+    const layoutKey = `${productId}:${workflow.nodes.map((node) => node.id).join("|")}`;
+    if (mobileInitialCanvasViewRef.current === layoutKey) {
+      return;
+    }
+    mobileInitialCanvasViewRef.current = layoutKey;
+
+    window.requestAnimationFrame(() => {
+      const currentScrollElement = canvasScrollRef.current;
+      if (!currentScrollElement) {
+        return;
+      }
+      const selectedNodePosition = getRenderedNodePosition(selectedNode);
+      currentScrollElement.scrollLeft = Math.max(
+        0,
+        (selectedNodePosition.x + NODE_WIDTH / 2) * zoom - currentScrollElement.clientWidth / 2,
+      );
+      currentScrollElement.scrollTop = Math.max(
+        0,
+        selectedNodePosition.y * zoom - Math.min(160, currentScrollElement.clientHeight * 0.22),
+      );
+    });
+  }, [canvasScrollRef, getRenderedNodePosition, mobileCanvasControlsActive, productId, selectedNode, workflow?.nodes, zoom]);
 
   if (productQuery.isLoading) {
     return (
@@ -1673,7 +1760,7 @@ export function ProductDetailPage() {
                 type="button"
                 onClick={() => createNodeMutation.mutate(option.type)}
                 disabled={structureBusy || !workflow}
-                className="inline-flex h-8 items-center rounded-md bg-zinc-950 px-2.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400"
+                className="inline-flex h-11 items-center rounded-md bg-zinc-950 px-3 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400 lg:h-8 lg:px-2.5"
                 title={t("detail.addNode", { label: optionLabel })}
                 aria-label={t("detail.addNode", { label: optionLabel })}
               >
@@ -1689,6 +1776,151 @@ export function ProductDetailPage() {
         );
       })}
     </div>
+  );
+
+  const sidebarTabItems: Array<{
+    key: SidebarTab;
+    label: string;
+    icon: ReactNode;
+  }> = [
+    { key: "singleNode", label: t("detail.tabSingleNode"), icon: <Plus size={16} /> },
+    { key: "templates", label: t("detail.tabTemplates"), icon: <Layers3 size={16} /> },
+    { key: "details", label: t("detail.tabDetails"), icon: <Settings2 size={16} /> },
+    { key: "runs", label: t("detail.tabRuns"), icon: <CircleDot size={16} /> },
+    { key: "images", label: t("detail.tabImages"), icon: <ImageIcon size={16} /> },
+  ];
+
+  const activeSidebarTabItem = sidebarTabItems.find((item) => item.key === activeSidebarTab) ?? sidebarTabItems[2];
+  const mobileCanvasModeItems: Array<{
+    key: CanvasInteractionMode;
+    label: string;
+    description: string;
+    icon: ReactNode;
+  }> = [
+    {
+      key: "browse",
+      label: t("detail.mobileCanvasBrowse"),
+      description: t("detail.mobileCanvasBrowseHint"),
+      icon: <Hand size={15} />,
+    },
+    {
+      key: "edit",
+      label: t("detail.mobileCanvasEdit"),
+      description: t("detail.mobileCanvasEditHint"),
+      icon: <Move size={15} />,
+    },
+    {
+      key: "select",
+      label: t("detail.mobileCanvasSelect"),
+      description: t("detail.mobileCanvasSelectHint"),
+      icon: <MousePointer2 size={15} />,
+    },
+  ];
+
+  const openMobileSidebarTab = (tab: SidebarTab) => {
+    setActiveSidebarTab(tab);
+    setMobileDetailsSheetOpen(true);
+  };
+
+  const renderDetailsPanelContent = () =>
+    selectedNode ? (
+      <InspectorPanel
+        product={product}
+        sourceImage={sourceImage}
+        workflow={workflow}
+        node={selectedNode}
+        draft={draft}
+        imageSizeOptions={imageSizeOptions}
+        imageGenerationMaxDimension={imageGenerationMaxDimension}
+        imageToolAllowedFields={imageToolAllowedFields}
+        onPreviewImage={setPreviewImage}
+        onDraftChange={handleDraftChange}
+        onRun={() => void handleRunWorkflow(selectedNode.id)}
+        onCancelRun={
+          selectedNodeCancelableRun
+            ? () => handleCancelWorkflowRun(selectedNodeCancelableRun)
+            : null
+        }
+        saveStatus={saveStatus}
+        onUploadImage={(file) => uploadNodeImageMutation.mutate(file)}
+        onDelete={() => handleDeleteNode(selectedNode)}
+        busy={structureBusy}
+        cancelBusy={cancelWorkflowRunMutation.isPending}
+        runActionState={getWorkflowNodeRunActionState(selectedNode, {
+          runSubmissionPending,
+          pendingStartNodeId,
+        })}
+      />
+    ) : (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 px-4 py-5 text-sm text-zinc-500 dark:border-slate-700 dark:bg-slate-950/45 dark:text-slate-400">
+        {t("detail.selectNodeHint")}
+      </div>
+    );
+
+  const renderSidebarPanelContent = () => (
+    <>
+      {activeSidebarTab === "singleNode" ? renderSingleNodePanel() : null}
+      {activeSidebarTab === "details" ? renderDetailsPanelContent() : null}
+      {activeSidebarTab === "runs" ? (
+        <RunsPanel
+          workflow={workflow}
+          latestRun={latestRun}
+          busyRunId={workflowRunActionBusyRunId ?? null}
+          onRetryRun={handleRetryWorkflowRun}
+        />
+      ) : null}
+      {activeSidebarTab === "images" ? (
+        <ImagesPanel
+          product={product}
+          posters={posters}
+          referenceAssets={referenceAssets}
+          artifactCount={artifactCount}
+          selectedReferenceNode={selectedReferenceNode}
+          posterSourceAssetIds={posterSourceAssetIds}
+          onPreviewImage={setPreviewImage}
+          onFillFromSourceAsset={(sourceAssetId) =>
+            bindNodeImageMutation.mutate({
+              source_asset_id: sourceAssetId,
+            })
+          }
+          onFillFromPoster={(posterId) =>
+            bindNodeImageMutation.mutate({
+              poster_variant_id: posterId,
+            })
+          }
+          fillReferenceBusy={fillReferenceBusy}
+        />
+      ) : null}
+      {activeSidebarTab === "templates" ? (
+        <TemplateGroupsPanel
+          templates={canvasTemplates}
+          isLoading={canvasTemplatesQuery.isLoading}
+          isError={canvasTemplatesQuery.isError}
+          structureBusy={structureBusy || !workflow}
+          applyBusy={applyTemplateGroupMutation.isPending}
+          applyingTemplateKey={applyTemplateGroupMutation.variables?.key ?? null}
+          onApplyTemplate={(template) => applyTemplateGroupMutation.mutate(template)}
+          userTemplateBusy={userTemplateMutationBusy}
+          onRenameUserTemplate={(template, title) => {
+            if (template.user_template_id) {
+              updateUserTemplateGroupMutation.mutate({
+                templateId: template.user_template_id,
+                title,
+              });
+            }
+          }}
+          onArchiveUserTemplate={(template) => {
+            if (template.user_template_id) {
+              setPendingDeleteAction({
+                kind: "template",
+                templateId: template.user_template_id,
+                title: template.title,
+              });
+            }
+          }}
+        />
+      ) : null}
+    </>
   );
 
   return (
@@ -1721,11 +1953,11 @@ export function ProductDetailPage() {
           <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:18px_18px] dark:bg-[radial-gradient(rgba(148,163,184,0.2)_1px,transparent_1px)]" />
           <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-transparent to-indigo-50/40 dark:from-[#060a12]/78 dark:via-transparent dark:to-[#151f33]/70" />
           <section className="relative z-10 min-w-0 flex-1 overflow-hidden">
-            <div data-canvas-control className="pointer-events-none absolute right-4 top-4 z-30">
+            <div data-canvas-control className="pointer-events-none absolute right-3 top-3 z-30 lg:right-4 lg:top-4">
               <button
                 type="button"
                 onClick={() => setTopChromeCollapsed((collapsed) => !collapsed)}
-                className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white/90 text-zinc-600 shadow-sm backdrop-blur transition-colors hover:bg-white hover:text-zinc-900 dark:border-slate-700/80 dark:bg-[#151f33]/92 dark:text-slate-300 dark:shadow-black/20 dark:hover:bg-[#1a2740] dark:hover:text-white"
+                className="pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200 bg-white/90 text-zinc-600 shadow-sm backdrop-blur transition-colors active:scale-[0.98] hover:bg-white hover:text-zinc-900 dark:border-slate-700/80 dark:bg-[#151f33]/92 dark:text-slate-300 dark:shadow-black/20 dark:hover:bg-[#1a2740] dark:hover:text-white lg:h-9 lg:w-9 lg:rounded-lg"
                 aria-label={topChromeCollapsed ? t("detail.restoreCanvas") : t("detail.maximizeCanvas")}
                 title={topChromeCollapsed ? t("detail.restoreCanvas") : t("detail.maximizeCanvas")}
               >
@@ -1734,11 +1966,12 @@ export function ProductDetailPage() {
             </div>
             <div
               ref={canvasScrollRef}
-              className={`h-full overflow-auto p-6 ${panePan ? "cursor-grabbing" : "cursor-grab"}`}
+              className={`h-full touch-none overflow-auto overscroll-contain p-3 pb-[calc(13rem+env(safe-area-inset-bottom))] lg:p-6 ${panePan ? "cursor-grabbing" : pinchZooming ? "cursor-zoom-in" : "cursor-grab"}`}
               onPointerDown={startPanePan}
               onPointerMove={movePanePan}
               onPointerUp={endPanePan}
               onPointerCancel={cancelPanePan}
+              onPointerLeave={leavePanePan}
               onLostPointerCapture={cancelPanePan}
               onClick={handleCanvasBlankClick}
               onWheel={handleCanvasWheel}
@@ -1851,6 +2084,7 @@ export function ProductDetailPage() {
                         }
                         onMoveConnection={moveConnectionDrag}
                         onEndConnection={endConnectionDrag}
+                        onCancelConnection={cancelConnectionDrag}
                         onRun={() => void handleRunWorkflow(node.id)}
                         onDelete={() => handleDeleteNode(node)}
                         busy={structureBusy}
@@ -1869,12 +2103,12 @@ export function ProductDetailPage() {
               )}
             </div>
 
-            <div data-canvas-control className="pointer-events-none absolute bottom-4 left-4 z-30">
+            <div data-canvas-control className="pointer-events-none absolute left-3 top-3 z-30 lg:left-4 lg:top-4">
               <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-zinc-200 bg-white/90 p-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-[#151f33]/92 dark:shadow-black/20">
               <button
                 type="button"
                 onClick={() => updateZoom(zoom - 0.1)}
-                className="inline-flex items-center rounded px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white"
+                className="inline-flex h-11 min-w-11 items-center justify-center rounded px-2 text-xs text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white lg:h-auto lg:min-w-0 lg:py-1"
                 aria-label={t("detail.zoomOut")}
               >
                 <ZoomOut size={13} />
@@ -1882,7 +2116,7 @@ export function ProductDetailPage() {
               <button
                 type="button"
                 onClick={() => updateZoom(1)}
-                className="rounded px-2 py-1 text-xs tabular-nums text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white"
+                className="h-11 min-w-11 rounded px-2 text-xs tabular-nums text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white lg:h-auto lg:min-w-0 lg:py-1"
                 aria-label={t("detail.resetZoom")}
               >
                 {Math.round(zoom * 100)}%
@@ -1890,7 +2124,7 @@ export function ProductDetailPage() {
               <button
                 type="button"
                 onClick={() => updateZoom(zoom + 0.1)}
-                className="inline-flex items-center rounded px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white"
+                className="inline-flex h-11 min-w-11 items-center justify-center rounded px-2 text-xs text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white lg:h-auto lg:min-w-0 lg:py-1"
                 aria-label={t("detail.zoomIn")}
               >
                 <ZoomIn size={13} />
@@ -1898,8 +2132,8 @@ export function ProductDetailPage() {
               </div>
             </div>
             {selectedGroupCount > 1 ? (
-              <div data-canvas-control className="pointer-events-none absolute left-1/2 top-4 z-30 -translate-x-1/2">
-                <div className="pointer-events-auto min-w-[22rem] rounded-xl border border-indigo-200 bg-white/95 p-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-950/10 backdrop-blur dark:border-violet-400/50 dark:bg-[#151f33]/95 dark:text-violet-100 dark:shadow-black/30">
+              <div data-canvas-control className="pointer-events-none absolute left-3 right-3 top-[4.5rem] z-30 lg:left-1/2 lg:right-auto lg:top-4 lg:-translate-x-1/2">
+                <div className="pointer-events-auto rounded-xl border border-indigo-200 bg-white/95 p-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-950/10 backdrop-blur dark:border-violet-400/50 dark:bg-[#151f33]/95 dark:text-violet-100 dark:shadow-black/30 lg:min-w-[22rem]">
                   <div className="flex items-center gap-2">
                     <Check size={16} strokeWidth={2.5} />
                     <span className="mr-auto">{t("detail.selectedCount", { count: selectedGroupCount })}</span>
@@ -1907,7 +2141,7 @@ export function ProductDetailPage() {
                       type="button"
                       onClick={() => setTemplateSaveOpen((open) => !open)}
                       disabled={createUserTemplateGroupMutation.isPending}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-700 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/16 dark:text-violet-100 dark:hover:border-violet-300/70 dark:hover:bg-violet-500/25"
+                      className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/16 dark:text-violet-100 dark:hover:border-violet-300/70 dark:hover:bg-violet-500/25 lg:h-8 lg:px-2.5"
                     >
                       {createUserTemplateGroupMutation.isPending ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -1920,7 +2154,7 @@ export function ProductDetailPage() {
                       type="button"
                       onClick={handleDeleteSelectedNodes}
                       disabled={deleteSelectedNodesMutation.isPending || structureBusy}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100"
+                      className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100 lg:h-8 lg:px-2.5"
                     >
                       {deleteSelectedNodesMutation.isPending ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -1932,7 +2166,7 @@ export function ProductDetailPage() {
                     <button
                       type="button"
                       onClick={clearMultiSelection}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100 lg:h-8 lg:w-8"
                       aria-label={t("detail.clearSelection")}
                       title={t("detail.clearSelection")}
                     >
@@ -1950,14 +2184,14 @@ export function ProductDetailPage() {
                       <input
                         value={templateSaveTitle}
                         onChange={(event) => setTemplateSaveTitle(event.target.value)}
-                        className="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-indigo-300 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400"
+                        className="h-11 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-indigo-300 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 lg:h-9"
                         placeholder={t("detail.templateName")}
                         maxLength={255}
                       />
                       <input
                         value={templateSaveDescription}
                         onChange={(event) => setTemplateSaveDescription(event.target.value)}
-                        className="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-indigo-300 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400"
+                        className="h-11 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-indigo-300 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 lg:h-9"
                         placeholder={t("detail.templateDescription")}
                         maxLength={1000}
                       />
@@ -1965,14 +2199,14 @@ export function ProductDetailPage() {
                         <button
                           type="button"
                           onClick={() => setTemplateSaveOpen(false)}
-                          className="h-8 rounded-lg px-2.5 text-xs font-semibold text-zinc-500 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+                          className="h-11 rounded-lg px-3 text-xs font-semibold text-zinc-500 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white lg:h-8 lg:px-2.5"
                         >
                           {t("detail.cancel")}
                         </button>
                         <button
                           type="submit"
                           disabled={createUserTemplateGroupMutation.isPending}
-                          className="inline-flex h-8 items-center rounded-lg bg-zinc-950 px-3 text-xs font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400"
+                          className="inline-flex h-11 items-center rounded-lg bg-zinc-950 px-3 text-xs font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400 lg:h-8"
                         >
                           {t("detail.save")}
                         </button>
@@ -1986,7 +2220,7 @@ export function ProductDetailPage() {
 
           {sidebarCollapsed ? (
             <>
-            <div data-canvas-control className="group/sidebar-expand absolute right-0 top-0 z-30 flex h-full w-8 items-center justify-center">
+            <div data-canvas-control className="group/sidebar-expand absolute right-0 top-0 z-30 hidden h-full w-8 items-center justify-center lg:flex">
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(false)}
@@ -1999,7 +2233,7 @@ export function ProductDetailPage() {
             </div>
             <div
               data-canvas-control
-              className="absolute right-4 top-16 z-30 flex w-[72px] flex-col items-center gap-2 rounded-2xl border border-slate-700/80 bg-[#0f1726]/95 p-2 shadow-xl shadow-slate-950/25 backdrop-blur"
+              className="absolute right-4 top-16 z-30 hidden w-[72px] flex-col items-center gap-2 rounded-2xl border border-slate-700/80 bg-[#0f1726]/95 p-2 shadow-xl shadow-slate-950/25 backdrop-blur lg:flex"
             >
               {renderWorkflowToolbarButtons()}
               <SidebarTabButton active={false} label={t("detail.tabSingleNode")} title={t("detail.tabSingleNode")} icon={<Plus size={17} />} onClick={() => openSidebarTab("singleNode")} />
@@ -2011,7 +2245,7 @@ export function ProductDetailPage() {
             </div>
             </>
           ) : (
-          <div className="relative z-20 flex shrink-0 border-l border-slate-200 bg-white/95 shadow-[-8px_0_24px_-20px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[-16px_0_42px_rgba(0,0,0,0.28)]">
+          <div className="relative z-20 hidden shrink-0 border-l border-slate-200 bg-white/95 shadow-[-8px_0_24px_-20px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[-16px_0_42px_rgba(0,0,0,0.28)] lg:flex">
             <div data-canvas-control className="group/sidebar-collapse absolute left-[-28px] top-0 z-30 flex h-full w-7 items-center justify-center">
               <button
                 type="button"
@@ -2074,126 +2308,121 @@ export function ProductDetailPage() {
               />
               <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-slate-700/80">
                 <div className="flex items-center">
-                {activeSidebarTab === "singleNode" ? <Plus size={14} className="mr-2 text-zinc-400 dark:text-slate-400" /> : null}
-                {activeSidebarTab === "templates" ? <Layers3 size={14} className="mr-2 text-zinc-400 dark:text-slate-400" /> : null}
-                {activeSidebarTab === "details" ? <Settings2 size={14} className="mr-2 text-zinc-400 dark:text-slate-400" /> : null}
-                {activeSidebarTab === "runs" ? <CircleDot size={14} className="mr-2 text-zinc-400 dark:text-slate-400" /> : null}
-                {activeSidebarTab === "images" ? <ImageIcon size={14} className="mr-2 text-zinc-400 dark:text-slate-400" /> : null}
+                <span className="mr-2 text-zinc-400 dark:text-slate-400">{activeSidebarTabItem.icon}</span>
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-slate-300">
-                  {activeSidebarTab === "singleNode"
-                    ? t("detail.tabSingleNode")
-                    : activeSidebarTab === "templates"
-                      ? t("detail.tabTemplates")
-                      : activeSidebarTab === "details"
-                        ? t("detail.tabDetails")
-                        : activeSidebarTab === "runs"
-                          ? t("detail.tabRuns")
-                          : t("detail.tabImages")}
+                  {activeSidebarTabItem.label}
                 </span>
                 </div>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {activeSidebarTab === "singleNode" ? renderSingleNodePanel() : null}
-                {activeSidebarTab === "details" ? (
-                  selectedNode ? (
-                    <InspectorPanel
-                      product={product}
-                      sourceImage={sourceImage}
-                      workflow={workflow}
-                      node={selectedNode}
-                      draft={draft}
-                      imageSizeOptions={imageSizeOptions}
-                      imageGenerationMaxDimension={imageGenerationMaxDimension}
-                      imageToolAllowedFields={imageToolAllowedFields}
-                      onPreviewImage={setPreviewImage}
-                      onDraftChange={handleDraftChange}
-                      onRun={() => void handleRunWorkflow(selectedNode.id)}
-                      onCancelRun={
-                        selectedNodeCancelableRun
-                          ? () => handleCancelWorkflowRun(selectedNodeCancelableRun)
-                          : null
-                      }
-                      saveStatus={saveStatus}
-                      onUploadImage={(file) => uploadNodeImageMutation.mutate(file)}
-                      onDelete={() => handleDeleteNode(selectedNode)}
-                      busy={structureBusy}
-                      cancelBusy={cancelWorkflowRunMutation.isPending}
-                      runActionState={getWorkflowNodeRunActionState(selectedNode, {
-                        runSubmissionPending,
-                        pendingStartNodeId,
-                      })}
-                    />
-                  ) : (
-                    <div className="text-xs text-zinc-500 dark:text-slate-400">
-                      {t("detail.selectNodeHint")}
-                    </div>
-                  )
-                ) : null}
-                {activeSidebarTab === "runs" ? (
-                  <RunsPanel
-                    workflow={workflow}
-                    latestRun={latestRun}
-                    busyRunId={workflowRunActionBusyRunId ?? null}
-                    onRetryRun={handleRetryWorkflowRun}
-                  />
-                ) : null}
-                {activeSidebarTab === "images" ? (
-                  <ImagesPanel
-                    product={product}
-                    posters={posters}
-                    referenceAssets={referenceAssets}
-                    artifactCount={artifactCount}
-                    selectedReferenceNode={selectedReferenceNode}
-                    posterSourceAssetIds={posterSourceAssetIds}
-                    onPreviewImage={setPreviewImage}
-                    onFillFromSourceAsset={(sourceAssetId) =>
-                      bindNodeImageMutation.mutate({
-                        source_asset_id: sourceAssetId,
-                      })
-                    }
-                    onFillFromPoster={(posterId) =>
-                      bindNodeImageMutation.mutate({
-                        poster_variant_id: posterId,
-                      })
-                    }
-                    fillReferenceBusy={fillReferenceBusy}
-                  />
-                ) : null}
-                {activeSidebarTab === "templates" ? (
-                  <TemplateGroupsPanel
-                    templates={canvasTemplates}
-                    isLoading={canvasTemplatesQuery.isLoading}
-                    isError={canvasTemplatesQuery.isError}
-                    structureBusy={structureBusy || !workflow}
-                    applyBusy={applyTemplateGroupMutation.isPending}
-                    applyingTemplateKey={applyTemplateGroupMutation.variables?.key ?? null}
-                    onApplyTemplate={(template) => applyTemplateGroupMutation.mutate(template)}
-                    userTemplateBusy={userTemplateMutationBusy}
-                    onRenameUserTemplate={(template, title) => {
-                      if (template.user_template_id) {
-                        updateUserTemplateGroupMutation.mutate({
-                          templateId: template.user_template_id,
-                          title,
-                        });
-                      }
-                    }}
-                    onArchiveUserTemplate={(template) => {
-                      if (template.user_template_id) {
-                        setPendingDeleteAction({
-                          kind: "template",
-                          templateId: template.user_template_id,
-                          title: template.title,
-                        });
-                      }
-                    }}
-                  />
-                ) : null}
+                {renderSidebarPanelContent()}
               </div>
             </aside>
           </div>
           )}
         </div>
       </main>
+
+      <div
+        className="fixed inset-x-0 z-40 px-2 lg:hidden"
+        style={{ bottom: topChromeCollapsed ? "calc(0.75rem + env(safe-area-inset-bottom))" : "calc(4.1rem + env(safe-area-inset-bottom))" }}
+      >
+        <div
+          className="mx-auto max-w-[28rem] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_-6px_18px_rgba(15,23,42,0.12)] dark:border-slate-700 dark:bg-slate-950 dark:shadow-[0_-12px_28px_rgba(0,0,0,0.30)]"
+        >
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900/85">
+            {mobileCanvasModeItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setMobileCanvasMode(item.key)}
+                className={`inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-2 text-xs font-semibold transition-colors active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-violet-400 ${
+                  mobileCanvasMode === item.key
+                    ? "bg-white text-indigo-700 shadow-sm dark:bg-violet-500/18 dark:text-violet-100 dark:ring-1 dark:ring-violet-300/35"
+                    : "text-slate-500 hover:bg-white/70 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                }`}
+                aria-pressed={mobileCanvasMode === item.key}
+                aria-label={item.description}
+                title={item.description}
+              >
+                {item.icon}
+                <span className="truncate">{item.label}</span>
+              </button>
+            ))}
+          </div>
+          <div
+            role="toolbar"
+            aria-label={t("detail.mobileToolbar")}
+            className="mt-1.5 grid grid-cols-6 gap-1"
+          >
+            <button
+              type="button"
+              onClick={() => void handleRunWorkflow(undefined)}
+              disabled={fullWorkflowRunBusy || !workflow}
+              className="inline-flex min-h-14 min-w-0 flex-col items-center justify-center rounded-xl bg-indigo-600 px-1 text-[10px] font-semibold leading-[1.05] text-white shadow-lg shadow-indigo-600/20 transition-colors active:scale-[0.98] hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gradient-to-r dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500 dark:shadow-violet-900/45 dark:ring-1 dark:ring-violet-300/35"
+              aria-label={fullWorkflowRunBusy ? t("detail.workflowRunning") : t("detail.runWorkflow")}
+            >
+              {fullWorkflowRunBusy ? <Loader2 size={17} className="mb-1 shrink-0 animate-spin" /> : <Play size={17} className="mb-1 shrink-0" />}
+              <span className="max-w-full text-center">{fullWorkflowRunBusy ? t("detail.running") : t("detail.run")}</span>
+            </button>
+            {sidebarTabItems.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => openMobileSidebarTab(item.key)}
+              className={`inline-flex min-h-14 min-w-0 flex-col items-center justify-center rounded-xl border px-1 text-[10px] font-semibold leading-[1.05] text-slate-600 transition-colors active:scale-[0.98] hover:border-indigo-200 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:focus-visible:ring-violet-400 ${
+                activeSidebarTab === item.key
+                  ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-violet-400/55 dark:bg-violet-500/18 dark:text-violet-100"
+                  : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100"
+              }`}
+              aria-label={item.label}
+              title={item.label}
+            >
+              {item.icon}
+              <span className="mt-1 max-w-full text-center">{item.label}</span>
+            </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <Drawer.Root
+        direction="bottom"
+        handleOnly
+        open={mobileDetailsSheetOpen}
+        onOpenChange={setMobileDetailsSheetOpen}
+      >
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-[70] bg-slate-950/42 lg:hidden" />
+          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[71] flex h-[80dvh] max-h-[80dvh] flex-col overflow-hidden rounded-t-[1.5rem] border-t border-slate-200 bg-white shadow-[0_-12px_34px_rgba(15,23,42,0.16)] outline-none dark:border-slate-700 dark:bg-[#0f1726] dark:shadow-[0_-18px_42px_rgba(0,0,0,0.34)] lg:hidden">
+            <Drawer.Title className="sr-only">{t("detail.mobileDetailsSheet")}</Drawer.Title>
+            <Drawer.Handle className="mx-auto mt-2 flex h-7 w-24 items-center justify-center rounded-full text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-500 dark:focus-visible:ring-violet-400">
+              <span className="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-slate-600" />
+            </Drawer.Handle>
+            <div className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 pb-3 dark:border-slate-800">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-indigo-600 dark:text-violet-200">{activeSidebarTabItem.icon}</span>
+                <span className="truncate text-sm font-semibold text-slate-950 dark:text-white">{activeSidebarTabItem.label}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileDetailsSheetOpen(false)}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition-colors active:scale-[0.98] hover:border-slate-300 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100 dark:focus-visible:ring-violet-400"
+                aria-label={t("detail.closeMobileSheet")}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div
+              data-vaul-no-drag
+              className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 [-webkit-overflow-scrolling:touch] [&_a]:min-h-11 [&_button]:min-h-11 [&_input]:min-h-11"
+            >
+              {renderSidebarPanelContent()}
+            </div>
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Drawer.Root>
+
       {previewImage ? (
         <ImagePreviewModal
           image={previewImage}

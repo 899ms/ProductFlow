@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { WorkflowEdge, WorkflowNode } from "../../lib/types";
+import type { ProductWorkflow, WorkflowEdge, WorkflowNode } from "../../lib/types";
 import {
   createRestoreNodesStep,
   getInternalWorkflowEdges,
+  getWorkflowStructureSignature,
   workflowHistoryStepRequiresConfirmation,
 } from "./workflowHistory";
 
@@ -34,6 +35,19 @@ const baseEdge = (id: string, source: string, target: string): WorkflowEdge => (
   created_at: "2026-05-14T01:02:03Z",
 });
 
+const baseWorkflow = (overrides: Partial<ProductWorkflow> = {}): ProductWorkflow => ({
+  id: "workflow",
+  product_id: "product",
+  title: "Workflow",
+  active: true,
+  nodes: [baseNode("b"), baseNode("a")],
+  edges: [baseEdge("edge-2", "b", "a"), baseEdge("edge-1", "a", "b")],
+  runs: [],
+  created_at: "2026-05-14T01:02:03Z",
+  updated_at: "2026-05-14T01:02:03Z",
+  ...overrides,
+});
+
 describe("workflow history helpers", () => {
   it("only asks for confirmation when executing a history step would delete nodes or edges", () => {
     expect(workflowHistoryStepRequiresConfirmation({ kind: "deleteNodes", nodeIds: ["a"] })).toBe(true);
@@ -51,6 +65,21 @@ describe("workflow history helpers", () => {
     ];
 
     expect(getInternalWorkflowEdges(edges, new Set(["a", "b"])).map((edge) => edge.id)).toEqual(["internal"]);
+  });
+
+  it("builds a stable structure signature from workflow timestamp and sorted structure ids", () => {
+    expect(getWorkflowStructureSignature(baseWorkflow())).toBe(
+      "workflow|2026-05-14T01:02:03Z|a,b|edge-1,edge-2",
+    );
+    expect(
+      getWorkflowStructureSignature(
+        baseWorkflow({
+          updated_at: "2026-05-14T02:00:00Z",
+          nodes: [baseNode("a"), baseNode("c")],
+          edges: [baseEdge("edge-3", "a", "c")],
+        }),
+      ),
+    ).toBe("workflow|2026-05-14T02:00:00Z|a,c|edge-3");
   });
 
   it("stores deleted node structure without output, run state, or generated artifacts", () => {
