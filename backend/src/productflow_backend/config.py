@@ -424,7 +424,7 @@ CONFIG_DEFINITIONS: tuple[ConfigDefinition, ...] = (
         category="海报与上传",
         input_type="select",
         options=(ConfigOption("template", "模板渲染"), ConfigOption("generated", "AI 生成")),
-        description="模板渲染不消耗图片模型；AI 生成会调用图片供应商。",
+        description="本地模板用于 mock/dev fallback；绑定真实图片供应商时工作流生图自动使用 AI 生成。",
     ),
     ConfigDefinition(
         key="poster_font_path",
@@ -625,7 +625,10 @@ def normalize_image_generation_size(
         resolved_width = max(1, int(resolved_width * pixel_scale))
         resolved_height = max(1, int(resolved_height * pixel_scale))
     resolved_width = _nearest_image_generation_dimension_multiple(resolved_width, max_dimension=effective_max_dimension)
-    resolved_height = _nearest_image_generation_dimension_multiple(resolved_height, max_dimension=effective_max_dimension)
+    resolved_height = _nearest_image_generation_dimension_multiple(
+        resolved_height,
+        max_dimension=effective_max_dimension,
+    )
     return f"{resolved_width}x{resolved_height}"
 
 
