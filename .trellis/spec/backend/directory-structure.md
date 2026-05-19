@@ -126,7 +126,8 @@ Put workflow rules and orchestration in `backend/src/productflow_backend/applica
     topological ordering, and latest-run ordering. Keep these graph/query concerns out of
     `application/product_workflows.py`.
   - `application/product_workflow/mutations.py` owns workflow graph/edit use cases: create/update/delete nodes and edges,
-    upload/bind reference images, edit generated copy, and normalize the product-context singleton.
+    upload/bind reference images, edit generated copy, normalize the product-context singleton, and shared node patch
+    semantics such as title/config normalization plus failed-node repair reset.
   - `application/product_workflow/execution.py` owns workflow run kickoff/execution, selected-node planning, and node
     dispatch. Keep node-specific provider/render orchestration in cohesive owner modules instead of growing this file
     back into a full execution monolith.

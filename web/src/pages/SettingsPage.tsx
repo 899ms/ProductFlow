@@ -98,7 +98,7 @@ export interface ProviderDrawerViewState {
   form: ProviderProfileFormState;
 }
 
-interface TextBindingDraft {
+export interface TextBindingDraft {
   provider_kind: "mock" | "openai";
   provider_profile_id: string;
   brief_model: string;
@@ -426,6 +426,18 @@ function textBindingDraft(binding: ProviderBinding | undefined): TextBindingDraf
     provider_profile_id: binding?.provider_profile_id ?? "",
     brief_model: textValue(binding?.model_settings, "brief_model"),
     copy_model: textValue(binding?.model_settings, "copy_model"),
+  };
+}
+
+export function textBindingPayloadFromDraft(draft: TextBindingDraft): ProviderBindingUpdateRequest {
+  return {
+    provider_kind: draft.provider_kind,
+    provider_profile_id: draft.provider_kind === "mock" ? null : draft.provider_profile_id,
+    model_settings: {
+      ...(draft.brief_model.trim() ? { brief_model: draft.brief_model.trim() } : {}),
+      ...(draft.copy_model.trim() ? { copy_model: draft.copy_model.trim() } : {}),
+    },
+    config: {},
   };
 }
 
@@ -1963,16 +1975,7 @@ export function SettingsPage() {
   });
 
   const updateTextBindingMutation = useMutation({
-    mutationFn: () =>
-      api.updateProviderBinding("text", {
-        provider_kind: textDraft.provider_kind,
-        provider_profile_id: textDraft.provider_kind === "mock" ? null : textDraft.provider_profile_id,
-        model_settings: {
-          ...(textDraft.brief_model.trim() ? { brief_model: textDraft.brief_model.trim() } : {}),
-          ...(textDraft.copy_model.trim() ? { copy_model: textDraft.copy_model.trim() } : {}),
-        },
-        config: {},
-      }),
+    mutationFn: () => api.updateProviderBinding("text", textBindingPayloadFromDraft(textDraft)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["provider-config"] });
       setError("");

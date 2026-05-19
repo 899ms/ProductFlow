@@ -319,23 +319,24 @@ const DOC_PAGES: DocPage[] = [
         blocks: [
           {
             type: "paragraph",
-            text: "选中多个节点后，画布顶部会出现操作浮层。浮层显示已选数量，并提供“保存模板”“删除”和清空选择按钮。",
+            text: "选中多个节点后，画布会显示已选数量；主选节点上方的工具栏提供复制、聚焦、保存模板和删除操作。",
           },
           {
             type: "steps",
             items: [
               "按住 Ctrl / Cmd / Shift 点击第一个节点，把它加入多选。",
               "继续按住 Ctrl / Cmd / Shift 点击其他节点，追加或移除选中状态。",
-              "如果节点很多，按住 Shift 后从画布空白处拖出选择框，框住目标节点。",
+              "桌面节点很多时，按住 Shift 后从画布空白处拖出选择框，框住目标节点。",
+              "移动端切到“选择”模式后，点按节点即可加入或移出多选。",
               "多选完成后，按住任意一个已选节点拖动，可以移动整组节点。",
-              "点击顶部浮层的“保存模板”，可以把当前多选节点保存为用户模板。",
-              "点击顶部浮层的“删除”，会删除选中节点及相关连线；点击右侧 X 可以清空多选。",
+              "点击主选节点工具栏中的“保存模板”，可以把当前多选节点保存为用户模板。",
+              "点击主选节点工具栏中的“删除”，会删除选中节点及相关连线；点击已选数量浮层的 X 可以清空多选。",
             ],
           },
           {
             type: "callout",
             title: "Shift 的两种用法",
-            text: "Shift 点击节点会切换该节点的选中状态；Shift 从画布空白处拖动会触发框选。不按 Shift 从空白处拖动则是平移画布。",
+            text: "Shift 点击节点会切换该节点的选中状态；桌面按住 Shift 从画布空白处拖动会触发框选。不按 Shift 从空白处拖动则是平移画布。",
           },
           {
             type: "list",
@@ -395,9 +396,9 @@ const DOC_PAGES: DocPage[] = [
           {
             type: "steps",
             items: [
-              "在画布中多选两个或更多节点：按住 Ctrl / Cmd / Shift 点击节点，或按住 Shift 从空白处框选。",
+              "在画布中多选两个或更多节点：桌面按住 Ctrl / Cmd / Shift 点击节点，或按住 Shift 从空白处框选；移动端使用“选择”模式点按节点。",
               "确认选中节点不包含商品节点。",
-              "点击顶部多选浮层中的“保存模板”。",
+              "点击主选节点工具栏中的“保存模板”。",
               "填写模板名称和可选描述。",
               "保存后在右侧“模板”面板中查看自定义模板。",
             ],
@@ -1102,7 +1103,7 @@ const DOC_PAGES_EN: DocPage[] = [
     sections: [
       { id: "canvas-controls", title: "Canvas controls", blocks: [{ type: "table", headers: ["Action", "Description"], rows: [["Desktop zoom", "Use the mouse wheel, or the bottom-right - / percentage / + controls."], ["Desktop pan", "Drag an empty canvas area with the left mouse button when no modifier is pressed. Dragging nodes, clicking controls, uploading, and drawing edges do not pan the canvas."], ["Desktop move one node", "Drag the node body or title area. The position is saved after release."], ["Desktop move multiple nodes", "Select multiple nodes, then drag any selected node to move the group."], ["Desktop create an edge", "Drag from the output handle on the right of a node to the input handle on the left of the target node."], ["Select one node", "Click the node body or the input handle. The Details panel shows that node."], ["Desktop add or remove from multi-select", "Ctrl-click a node. On macOS, Cmd-click also works. Shift-click also toggles selection."], ["Desktop box select", "Hold Shift, drag from an empty canvas area, and release to select nodes inside the box."]] }] },
       { id: "mobile-canvas-controls", title: "Mobile canvas controls", blocks: [{ type: "table", headers: ["Mode", "Description"], rows: [["Browse", "Default mode. One-finger dragging on blank canvas pans the view, tapping a node selects it, and two-finger pinch zooms the canvas."], ["Edit", "Touch and pen input can drag nodes and create edges by dragging from an output handle to a target node."], ["Select", "Tapping nodes adds or removes them from multi-select. Tapping blank canvas exits the temporary selection mode."], ["Bottom toolbar", "Provides workflow run, Single node, Templates, Details, Runs, and Library entrypoints. Panel content opens from the bottom sheet."]] }] },
-      { id: "multi-select", title: "Multi-select nodes", blocks: [{ type: "paragraph", text: "After selecting multiple nodes, an action bar appears at the top of the canvas. It shows the selected count and provides Save template, Delete, and clear selection controls." }, { type: "steps", items: ["Ctrl / Cmd / Shift-click the first node to add it to the selection.", "Keep using Ctrl / Cmd / Shift-click to add or remove nodes.", "For dense canvases, hold Shift and drag a box from an empty area.", "After selection, drag any selected node to move the group.", "Click Save template in the top action bar to save selected nodes as a user template.", "Click Delete to remove selected nodes and related edges; click X to clear multi-select."] }, { type: "callout", title: "Two uses of Shift", text: "Shift-click toggles a node. Shift-drag from an empty area starts box selection. Dragging an empty area without Shift pans the canvas." }, { type: "list", items: ["A saved template cannot include the product node.", "Clicking an empty canvas area clears multi-select while preserving the primary selected node.", "If the current node has an unsaved draft, the page attempts to save it before switching selection."] }] },
+      { id: "multi-select", title: "Multi-select nodes", blocks: [{ type: "paragraph", text: "After selecting multiple nodes, the canvas shows the selected count; the toolbar above the primary selected node provides Duplicate, Focus, Save template, and Delete actions." }, { type: "steps", items: ["Ctrl / Cmd / Shift-click the first node to add it to the selection.", "Keep using Ctrl / Cmd / Shift-click to add or remove nodes.", "For dense desktop canvases, hold Shift and drag a box from an empty area.", "On mobile, switch to Select mode and tap nodes to add or remove them.", "After selection, drag any selected node to move the group.", "Click Save template in the primary node toolbar to save selected nodes as a user template.", "Click Delete in the primary node toolbar to remove selected nodes and related edges; click X in the selected-count layer to clear multi-select."] }, { type: "callout", title: "Two uses of Shift", text: "Shift-click toggles a node. Shift-drag from an empty area starts desktop box selection. Dragging an empty area without Shift pans the canvas." }, { type: "list", items: ["A saved template cannot include the product node.", "Clicking an empty canvas area clears multi-select while preserving the primary selected node.", "If the current node has an unsaved draft, the page attempts to save it before switching selection."] }] },
     ],
   },
   {
@@ -1114,7 +1115,7 @@ const DOC_PAGES_EN: DocPage[] = [
     sections: [
       { id: "template-usage", title: "How templates are used", blocks: [{ type: "table", headers: ["Location", "Use"], rows: [["New product", "Choose one scene template to initialize the canvas."], ["Product workbench", "Add more built-in scene templates; the product context node reuses the existing product node on the canvas."], ["User templates", "Save selected nodes from the current canvas for later insertion inside the product workbench."]] }] },
       { id: "built-in-templates", title: "Built-in scene templates", blocks: [{ type: "list", items: ["Blank canvas: keeps only the product context entry for free arrangement.", "Listing hero: ecommerce hero, marketplace main image, and white-background assets for search, recommendations, first-screen detail, and platform requirements.", "Detail persuasion: SKU and variants, multiple angles, feature benefits, size specs, scale references, packing lists, usage steps, comparisons, and material/detail images.", "Scene gallery: model/lifestyle and usage-scene images for detail galleries, styling, home, space, and pairing displays.", "Content seeding: social note images and short-video covers for content feeds and live previews.", "Campaign: promotion images for campaign slots, event entry points, and ads."] }] },
-      { id: "save-user-template", title: "Save a user template", blocks: [{ type: "steps", items: ["Select two or more nodes on the canvas with Ctrl / Cmd / Shift-click, or hold Shift and box-select from an empty area.", "Confirm that the selected group does not include the product node.", "Click Save template in the top multi-select action bar.", "Enter a template name and optional description.", "After saving, view the custom template in the right Templates panel."] }, { type: "callout", title: "Templates do not save artifacts", text: "User templates save reusable configuration and internal edges among selected nodes. They do not save product data, generated images, or copy outputs, and they currently do not appear on the new product page." }] },
+      { id: "save-user-template", title: "Save a user template", blocks: [{ type: "steps", items: ["Select two or more nodes on the canvas with Ctrl / Cmd / Shift-click, or hold Shift and box-select from an empty desktop canvas area. On mobile, use Select mode and tap nodes.", "Confirm that the selected group does not include the product node.", "Click Save template in the primary node toolbar.", "Enter a template name and optional description.", "After saving, view the custom template in the right Templates panel."] }, { type: "callout", title: "Templates do not save artifacts", text: "User templates save reusable configuration and internal edges among selected nodes. They do not save product data, generated images, or copy outputs, and they currently do not appear on the new product page." }] },
     ],
   },
   {
@@ -1430,6 +1431,8 @@ const HELP_DOC_JA_TRANSLATIONS: Record<string, string> = {
   "提供运行工作流、单节点、模板、详情、日志和图库入口。面板内容从底部展开。":
     "ワークフロー実行、単一ノード、テンプレート、詳細、ログ、ライブラリの入口を提供します。パネル内容は下部から展開します。",
   "多选节点": "複数ノード選択",
+  "选中多个节点后，画布会显示已选数量；主选节点上方的工具栏提供复制、聚焦、保存模板和删除操作。":
+    "複数ノードを選択すると、キャンバスに選択数が表示されます。主選択ノード上部のツールバーから複製、フォーカス、テンプレート保存、削除を実行できます。",
   "选中多个节点后，画布顶部会出现操作浮层。浮层显示已选数量，并提供“保存模板”“删除”和清空选择按钮。":
     "複数ノードを選択すると、キャンバス上部に操作バーが表示されます。選択数が表示され、「テンプレートを保存」「削除」「選択をクリア」ボタンを使えます。",
   "按住 Ctrl / Cmd / Shift 点击第一个节点，把它加入多选。":
@@ -1438,13 +1441,23 @@ const HELP_DOC_JA_TRANSLATIONS: Record<string, string> = {
     "Ctrl / Cmd / Shift を押したまま他のノードをクリックし、選択状態を追加または解除します。",
   "如果节点很多，按住 Shift 后从画布空白处拖出选择框，框住目标节点。":
     "ノードが多い場合は、Shift を押しながら空白キャンバスから選択枠をドラッグし、対象ノードを囲みます。",
+  "桌面节点很多时，按住 Shift 后从画布空白处拖出选择框，框住目标节点。":
+    "デスクトップでノードが多い場合は、Shift を押しながら空白キャンバスから選択枠をドラッグし、対象ノードを囲みます。",
+  "移动端切到“选择”模式后，点按节点即可加入或移出多选。":
+    "モバイルでは「選択」モードに切り替えた後、ノードをタップして複数選択へ追加または解除します。",
   "多选完成后，按住任意一个已选节点拖动，可以移动整组节点。":
     "複数選択が完了したら、選択済みノードのどれかをドラッグしてグループ全体を移動できます。",
+  "点击主选节点工具栏中的“保存模板”，可以把当前多选节点保存为用户模板。":
+    "主選択ノードのツールバーにある「テンプレートを保存」をクリックすると、現在の複数選択ノードをユーザーテンプレートとして保存できます。",
   "点击顶部浮层的“保存模板”，可以把当前多选节点保存为用户模板。":
     "上部バーの「テンプレートを保存」をクリックすると、現在の複数選択ノードをユーザーテンプレートとして保存できます。",
+  "点击主选节点工具栏中的“删除”，会删除选中节点及相关连线；点击已选数量浮层的 X 可以清空多选。":
+    "主選択ノードのツールバーにある「削除」をクリックすると、選択ノードと関連接続線が削除されます。選択数の表示にある X をクリックすると複数選択をクリアできます。",
   "点击顶部浮层的“删除”，会删除选中节点及相关连线；点击右侧 X 可以清空多选。":
     "上部バーの「削除」をクリックすると、選択ノードと関連接続線が削除されます。右側の X をクリックすると複数選択をクリアできます。",
   "Shift 的两种用法": "Shift の2つの使い方",
+  "Shift 点击节点会切换该节点的选中状态；桌面按住 Shift 从画布空白处拖动会触发框选。不按 Shift 从空白处拖动则是平移画布。":
+    "Shift クリックはそのノードの選択状態を切り替えます。デスクトップで Shift を押しながら空白キャンバスからドラッグすると範囲選択になります。Shift なしで空白領域をドラッグするとキャンバスをパンします。",
   "Shift 点击节点会切换该节点的选中状态；Shift 从画布空白处拖动会触发框选。不按 Shift 从空白处拖动则是平移画布。":
     "Shift クリックはそのノードの選択状態を切り替えます。Shift を押しながら空白キャンバスからドラッグすると範囲選択になります。Shift なしで空白領域をドラッグするとキャンバスをパンします。",
   "保存为模板时，选中组不能包含商品节点。": "テンプレートとして保存する場合、選択グループに商品ノードを含めることはできません。",
@@ -1476,10 +1489,13 @@ const HELP_DOC_JA_TRANSLATIONS: Record<string, string> = {
   "活动投放：活动/促销图，适合促销位、活动入口和广告素材。":
     "キャンペーン配信：イベント/販促画像。販促枠、イベント入口、広告素材に適しています。",
   "保存用户模板": "ユーザーテンプレートを保存",
+  "在画布中多选两个或更多节点：桌面按住 Ctrl / Cmd / Shift 点击节点，或按住 Shift 从空白处框选；移动端使用“选择”模式点按节点。":
+    "キャンバスで2つ以上のノードを複数選択します。デスクトップでは Ctrl / Cmd / Shift を押しながらノードをクリックするか、Shift を押しながら空白領域から範囲選択します。モバイルでは「選択」モードでノードをタップします。",
   "在画布中多选两个或更多节点：按住 Ctrl / Cmd / Shift 点击节点，或按住 Shift 从空白处框选。":
     "キャンバスで2つ以上のノードを複数選択します。Ctrl / Cmd / Shift を押しながらノードをクリックするか、Shift を押しながら空白領域から範囲選択します。",
   "确认选中节点不包含商品节点。": "選択ノードに商品ノードが含まれていないことを確認します。",
   "点击顶部多选浮层中的“保存模板”。": "上部の複数選択バーにある「テンプレートを保存」をクリックします。",
+  "点击主选节点工具栏中的“保存模板”。": "主選択ノードのツールバーにある「テンプレートを保存」をクリックします。",
   "填写模板名称和可选描述。": "テンプレート名と任意の説明を入力します。",
   "保存后在右侧“模板”面板中查看自定义模板。": "保存後、右側の「テンプレート」パネルでカスタムテンプレートを確認します。",
   "模板不会保存产物": "テンプレートは生成物を保存しません",

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from productflow_backend.application.product_workflow.execution import (
     WorkflowRunKickoff,
     cancel_product_workflow_run,
+    execute_product_workflow_node_run,
     execute_product_workflow_run,
     mark_workflow_run_enqueue_failed,
     retry_product_workflow_run,
@@ -19,6 +20,7 @@ from productflow_backend.application.product_workflow.graph import (
     latest_workflow_runs as _latest_workflow_runs,
 )
 from productflow_backend.application.product_workflow.mutations import (
+    AppliedWorkflowTemplateGroup,
     apply_node_group_template_to_workflow,
     bind_workflow_node_image,
     create_workflow_edge,
@@ -27,6 +29,8 @@ from productflow_backend.application.product_workflow.mutations import (
     delete_workflow_node,
     duplicate_workflow_node_group,
     get_or_create_product_workflow,
+    materialize_node_group_template_to_workflow,
+    normalize_workflow_node_config,
     update_workflow_copy_set,
     update_workflow_node,
     upload_workflow_node_image,
@@ -53,6 +57,7 @@ def get_product_workflow_status(session, product_id: str) -> ProductWorkflowStat
 
 __all__ = [
     "WorkflowRunKickoff",
+    "AppliedWorkflowTemplateGroup",
     "apply_node_group_template_to_workflow",
     "archive_user_canvas_template",
     "bind_workflow_node_image",
@@ -64,11 +69,14 @@ __all__ = [
     "delete_workflow_node",
     "duplicate_workflow_node_group",
     "execute_product_workflow_run",
+    "execute_product_workflow_node_run",
     "get_or_create_product_workflow",
     "get_product_workflow_status",
     "latest_workflow_runs",
     "list_canvas_templates",
     "mark_workflow_run_enqueue_failed",
+    "materialize_node_group_template_to_workflow",
+    "normalize_workflow_node_config",
     "retry_product_workflow_run",
     "rename_user_canvas_template",
     "run_product_workflow",

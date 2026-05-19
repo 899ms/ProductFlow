@@ -9,7 +9,6 @@ import {
   Check,
   Eye,
   Hand,
-  Save,
   Image as ImageIcon,
   Layers3,
   Loader2,
@@ -20,10 +19,7 @@ import {
   Play,
   Plus,
   Settings2,
-  Trash2,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Drawer } from "vaul";
@@ -43,20 +39,17 @@ import type {
 } from "../lib/types";
 import {
   ADD_NODE_OPTIONS,
-  CANVAS_MIN_HEIGHT,
-  CANVAS_MIN_WIDTH,
   MAX_INSPECTOR_WIDTH,
   MIN_INSPECTOR_WIDTH,
-  NODE_WIDTH,
 } from "./product-detail/constants";
-import { buildEdgePath } from "./product-detail/canvasUtils";
 import { ImagePreviewModal } from "./product-detail/ImagePreviewModal";
 import { ImagesPanel } from "./product-detail/ImagesPanel";
 import { InspectorPanel } from "./product-detail/InspectorPanel";
 import { RunsPanel } from "./product-detail/RunsPanel";
 import { SidebarTabButton } from "./product-detail/SidebarTabButton";
 import { TemplateGroupsPanel } from "./product-detail/TemplateGroupsPanel";
-import { WorkflowNodeCard } from "./product-detail/WorkflowNodeCard";
+import { WorkflowCanvas } from "./product-detail/WorkflowCanvas";
+import type { NodePositionCommitInput, WorkflowCanvasHandle } from "./product-detail/WorkflowCanvas";
 import {
   buildPosterSourceAssetMap,
   getVisibleReferenceAssets,
@@ -86,6 +79,17 @@ import type { WorkflowHistoryStep } from "./product-detail/workflowHistory";
 import { connectionDescription, localizedWorkflowNodeTypeLabel } from "./product-detail/nodeDisplay";
 import type { CanvasInteractionMode, NodeConfigDraft, SaveStatus } from "./product-detail/types";
 import {
+  buildWorkflowCanvasActionItems,
+  getWorkflowCanvasActionTargetForNodeToolbar,
+  getWorkflowCanvasActionTargetNodeIds,
+} from "./product-detail/workflowActions";
+import type {
+  WorkflowCanvasActionId,
+  WorkflowCanvasActionItem,
+  WorkflowCanvasActionToolbar,
+  WorkflowCanvasActionTarget,
+} from "./product-detail/workflowActions";
+import {
   clamp,
   getWorkflowNodeCancelableRun,
   getWorkflowNodeRunActionState,
@@ -103,11 +107,7 @@ import {
   nodeConfigFromDraft,
 } from "./product-detail/workflowConfig";
 import type { DownloadableImage } from "../lib/image-downloads";
-import {
-  buildConnectionDragPath,
-  useWorkflowCanvas,
-} from "./product-detail/useWorkflowCanvas";
-import type { NodePositionCommitInput } from "./product-detail/useWorkflowCanvas";
+import { normalizeWorkflowZoom } from "./product-detail/reactFlowAdapters";
 
 type SidebarTab = "singleNode" | "templates" | "details" | "runs" | "images";
 
@@ -125,18 +125,13 @@ type WorkflowClipboard = {
   nodeIds: string[];
 };
 
-type WorkflowCanvasMutationBridge = {
-  acceptNodePositionMutation: (nodeId: string, mutationVersion: number) => boolean;
-  clearOptimisticNodePosition: (nodeId: string) => void;
-};
-
 export function ProductDetailPage() {
   const { t } = useI18n();
   const { productId = "" } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const previousBodyUserSelectRef = useRef<string | null>(null);
-  const workflowCanvasRef = useRef<WorkflowCanvasMutationBridge | null>(null);
+  const workflowCanvasRef = useRef<WorkflowCanvasHandle | null>(null);
   const wasWorkflowActiveRef = useRef(false);
   const workflowHistorySignatureRef = useRef<string | null>(null);
   const draftVersionRef = useRef(0);
@@ -167,6 +162,9 @@ export function ProductDetailPage() {
   const [mobileCanvasMode, setMobileCanvasMode] = useState<CanvasInteractionMode>("browse");
   const [mobileCanvasControlsActive, setMobileCanvasControlsActive] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia("(max-width: 1023px)").matches,
+  );
+  const [initialWorkflowCanvasZoom] = useState(() =>
+    normalizeWorkflowZoom(readStoredNumber("productflow.workflow.zoom", 1)),
   );
   const [draft, setDraft] = useState<NodeConfigDraft>(() =>
     draftFromNode(null),
@@ -480,7 +478,7 @@ export function ProductDetailPage() {
     selectNodeForDetails(nodeId);
   };
 
-  const handleCanvasBlankClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+  const handleCanvasBlankClick = (event: ReactMouseEvent<Element>) => {
     if (skipNextCanvasBlankClickRef.current) {
       skipNextCanvasBlankClickRef.current = false;
       return;
@@ -514,6 +512,9 @@ export function ProductDetailPage() {
 
   const replaceSelectionFromBox = (nodeIds: string[]) => {
     skipNextCanvasBlankClickRef.current = true;
+    window.setTimeout(() => {
+      skipNextCanvasBlankClickRef.current = false;
+    }, 0);
     const nextSelection = replaceSelectedNodeIdsFromBox(nodeIds, selectedNodeId);
     if (!nextSelection.primaryNodeId) {
       setSelectedNodeId(null);
@@ -537,6 +538,13 @@ export function ProductDetailPage() {
 
   const getCurrentWorkflow = () =>
     queryClient.getQueryData<ProductWorkflow>(["product-workflow", productId]) ?? workflow ?? null;
+
+  const workflowNodeIdsContainProductContext = (nodeIds: string[]) => {
+    const nodeIdSet = new Set(nodeIds);
+    return Boolean(
+      getCurrentWorkflow()?.nodes.some((node) => nodeIdSet.has(node.id) && node.node_type === "product_context"),
+    );
+  };
 
   const setWorkflowCache = (nextWorkflow: ProductWorkflow) => {
     workflowHistorySignatureRef.current = getWorkflowStructureSignature(nextWorkflow);
@@ -813,7 +821,7 @@ export function ProductDetailPage() {
       const siblingCount = currentWorkflow.nodes.filter(
         (node) => node.node_type === type,
       ).length;
-      const nextPosition = workflowCanvas.getViewportCenterNodePosition();
+      const nextPosition = workflowCanvasRef.current?.getViewportCenterNodePosition() ?? { x: 120, y: 120 };
       return api.createWorkflowNode(productId, {
         node_type: type,
         title: defaultTitleForType(type, siblingCount + 1),
@@ -850,7 +858,7 @@ export function ProductDetailPage() {
       await flushSelectedDraft();
       const previousWorkflow = queryClient.getQueryData<ProductWorkflow>(["product-workflow", productId]) ?? workflow;
       const previousNodeIds = new Set(previousWorkflow?.nodes.map((node) => node.id) ?? []);
-      const nextPosition = workflowCanvas.getViewportCenterNodePosition();
+      const nextPosition = workflowCanvasRef.current?.getViewportCenterNodePosition() ?? { x: 120, y: 120 };
       const nextWorkflow = await api.applyWorkflowTemplateGroup(productId, {
         template_key: template.key,
         position_x: nextPosition.x,
@@ -889,6 +897,13 @@ export function ProductDetailPage() {
       }
       await flushSelectedDraft();
       const previousWorkflow = getCurrentWorkflow();
+      const nodeIdSet = new Set(nodeIds);
+      const hasDuplicableNodes = Boolean(
+        previousWorkflow?.nodes.some((node) => nodeIdSet.has(node.id) && node.node_type !== "product_context"),
+      );
+      if (!hasDuplicableNodes) {
+        throw new Error(t("detail.error.selectNodesToDuplicate"));
+      }
       const nextWorkflow = await api.duplicateWorkflowNodeGroup(productId, {
         node_ids: nodeIds,
         offset_x: 56,
@@ -927,6 +942,9 @@ export function ProductDetailPage() {
     mutationFn: async () => {
       if (selectedNodeIds.length < 2) {
         throw new Error(t("detail.error.selectNodesToSave"));
+      }
+      if (workflowNodeIdsContainProductContext(selectedNodeIds)) {
+        throw new Error(t("detail.error.templateContainsProductContext"));
       }
       const title = templateSaveTitle.trim();
       if (!title) {
@@ -1181,6 +1199,9 @@ export function ProductDetailPage() {
     mutationFn: async (nodeId: string) => {
       const currentWorkflow = getCurrentWorkflow();
       const node = currentWorkflow?.nodes.find((workflowNode) => workflowNode.id === nodeId);
+      if (node?.node_type === "product_context") {
+        throw new Error(t("detail.error.productContextProtected"));
+      }
       const nodeIds = new Set(node ? [node.id] : []);
       const restoreStep = createRestoreNodesStep(
         node ? [node] : [],
@@ -1210,6 +1231,10 @@ export function ProductDetailPage() {
   });
 
   const handleDeleteNode = (node: WorkflowNode) => {
+    if (node.node_type === "product_context") {
+      setError(t("detail.error.productContextProtected"));
+      return;
+    }
     setPendingDeleteAction({ kind: "node", node });
   };
 
@@ -1217,6 +1242,9 @@ export function ProductDetailPage() {
     mutationFn: async (nodeIds: string[]) => {
       if (nodeIds.length < 2) {
         throw new Error(t("detail.error.selectNodesToDelete"));
+      }
+      if (workflowNodeIdsContainProductContext(nodeIds)) {
+        throw new Error(t("detail.error.productContextProtected"));
       }
       const currentWorkflow = getCurrentWorkflow();
       const nodeIdSet = new Set(nodeIds);
@@ -1253,17 +1281,6 @@ export function ProductDetailPage() {
       );
     },
   });
-
-  const handleDeleteSelectedNodes = () => {
-    if (selectedNodeIds.length < 2) {
-      return;
-    }
-    setPendingDeleteAction({
-      kind: "selectedNodes",
-      nodeIds: [...selectedNodeIds],
-      count: selectedNodeIds.length,
-    });
-  };
 
   const uploadNodeImageMutation = useMutation({
     mutationFn: (file: File) => {
@@ -1418,26 +1435,27 @@ export function ProductDetailPage() {
     (cancelWorkflowRunMutation.isPending ? cancelWorkflowRunMutation.variables : null) ??
     (retryWorkflowRunMutation.isPending ? retryWorkflowRunMutation.variables : null);
   const pendingDeleteDialog = pendingDeleteAction
-    ? {
-        title:
-          pendingDeleteAction.kind === "node"
-            ? t("detail.confirm.deleteNodeTitle")
-            : pendingDeleteAction.kind === "selectedNodes"
-              ? t("detail.confirm.deleteSelectedNodesTitle")
-              : t("detail.confirm.deleteTemplateTitle"),
-        description:
-          pendingDeleteAction.kind === "node"
-            ? t("detail.confirm.deleteNode", { title: pendingDeleteAction.node.title })
-            : pendingDeleteAction.kind === "selectedNodes"
-              ? t("detail.confirm.deleteSelectedNodes", { count: pendingDeleteAction.count })
-              : t("detail.confirm.deleteTemplate", { title: pendingDeleteAction.title }),
-        busy:
-          pendingDeleteAction.kind === "node"
-            ? deleteNodeMutation.isPending
-            : pendingDeleteAction.kind === "selectedNodes"
-              ? deleteSelectedNodesMutation.isPending
-              : archiveUserTemplateGroupMutation.isPending,
-      }
+    ? (() => {
+        if (pendingDeleteAction.kind === "node") {
+          return {
+            title: t("detail.confirm.deleteNodeTitle"),
+            description: t("detail.confirm.deleteNode", { title: pendingDeleteAction.node.title }),
+            busy: deleteNodeMutation.isPending,
+          };
+        }
+        if (pendingDeleteAction.kind === "selectedNodes") {
+          return {
+            title: t("detail.confirm.deleteSelectedNodesTitle"),
+            description: t("detail.confirm.deleteSelectedNodes", { count: pendingDeleteAction.count }),
+            busy: deleteSelectedNodesMutation.isPending,
+          };
+        }
+        return {
+          title: t("detail.confirm.deleteTemplateTitle"),
+          description: t("detail.confirm.deleteTemplate", { title: pendingDeleteAction.title }),
+          busy: archiveUserTemplateGroupMutation.isPending,
+        };
+      })()
     : null;
   const pendingHistoryDeleteCount =
     pendingHistoryAction?.step.kind === "deleteNodes"
@@ -1451,6 +1469,95 @@ export function ProductDetailPage() {
         description: t("detail.confirm.historyDeletes", { count: pendingHistoryDeleteCount }),
       }
     : null;
+
+  const workflowActionPrimaryNode = (target: WorkflowCanvasActionTarget) => {
+    const primaryNodeId = target.kind === "single" ? target.nodeId : target.primaryNodeId;
+    return workflow?.nodes.find((node) => node.id === primaryNodeId) ?? null;
+  };
+
+  const workflowActionTargetNodes = (target: WorkflowCanvasActionTarget) => {
+    const targetNodeIds = new Set(getWorkflowCanvasActionTargetNodeIds(target));
+    return workflow?.nodes.filter((node) => targetNodeIds.has(node.id)) ?? [];
+  };
+
+  const workflowActionItems = (target: WorkflowCanvasActionTarget): WorkflowCanvasActionItem[] => {
+    const primaryNode = workflowActionPrimaryNode(target);
+    return buildWorkflowCanvasActionItems(target, {
+      primaryNode,
+      targetNodes: workflowActionTargetNodes(target),
+      runActionState: primaryNode
+        ? getWorkflowNodeRunActionState(primaryNode, {
+            runSubmissionPending,
+            pendingStartNodeId,
+          })
+        : null,
+      structureBusy,
+      duplicatePending: duplicateNodeGroupMutation.isPending,
+      templatePending: createUserTemplateGroupMutation.isPending,
+      deletePending: deleteNodeMutation.isPending || deleteSelectedNodesMutation.isPending,
+    }).map((item) => {
+      const label = item.label ?? (item.labelKey ? t(item.labelKey) : "");
+      return {
+        ...item,
+        label,
+        title: item.title ?? label,
+      };
+    });
+  };
+
+  const executeWorkflowCanvasAction = (actionId: WorkflowCanvasActionId, target: WorkflowCanvasActionTarget) => {
+    const nodeIds = getWorkflowCanvasActionTargetNodeIds(target);
+    if (actionId === "run") {
+      if (target.kind === "single") {
+        void handleRunWorkflow(target.nodeId);
+      }
+      return;
+    }
+    if (actionId === "duplicate") {
+      duplicateNodeGroupMutation.mutate({ nodeIds, source: "duplicate" });
+      return;
+    }
+    if (actionId === "fitSelected") {
+      workflowCanvasRef.current?.fitNodeIds(nodeIds);
+      return;
+    }
+    if (actionId === "saveTemplate") {
+      if (target.kind === "group") {
+        setSelectedNodeId(target.primaryNodeId);
+        setSelectedNodeIds(target.nodeIds);
+      }
+      setTemplateSaveOpen(true);
+      return;
+    }
+    if (nodeIds.length === 1) {
+      const node = workflow?.nodes.find((workflowNode) => workflowNode.id === nodeIds[0]);
+      if (node) {
+        if (node.node_type === "product_context") {
+          setError(t("detail.error.productContextProtected"));
+          return;
+        }
+        setPendingDeleteAction({ kind: "node", node });
+      }
+      return;
+    }
+    if (nodeIds.length > 1) {
+      setPendingDeleteAction({
+        kind: "selectedNodes",
+        nodeIds,
+        count: nodeIds.length,
+      });
+    }
+  };
+
+  const getWorkflowNodeActionToolbar = (nodeId: string): WorkflowCanvasActionToolbar | null => {
+    const target = getWorkflowCanvasActionTargetForNodeToolbar(nodeId, selectedNodeId, selectedNodeIds);
+    if (!target) {
+      return null;
+    }
+    const items = workflowActionItems(target);
+    return items.length ? { target, items } : null;
+  };
+
   const commitNodePosition = (input: NodePositionCommitInput) => {
     const rollbackWorkflow = queryClient.getQueryData<ProductWorkflow>([
       "product-workflow",
@@ -1481,52 +1588,6 @@ export function ProductDetailPage() {
       rollbackWorkflow,
     });
   };
-  const workflowCanvas = useWorkflowCanvas({
-    workflow,
-    zoomStorageKey: "productflow.workflow.zoom",
-    structureBusy,
-    onSelectNode: selectNodeForDetails,
-    onNodeDragStartSelect: selectNodeForDragStart,
-    getNodeDragGroup: (nodeId) => (selectedNodeIds.includes(nodeId) ? selectedNodeIds : [nodeId]),
-    onSelectionBoxComplete: replaceSelectionFromBox,
-    onNodePositionCommit: commitNodePosition,
-    onConnectionCreate: (input) => createEdgeMutation.mutate(input),
-    mobileInteractionMode: mobileCanvasControlsActive ? mobileCanvasMode : "edit",
-  });
-  workflowCanvasRef.current = workflowCanvas;
-  const {
-    canvasScrollRef,
-    canvasRef,
-    zoom,
-    nodeDrag,
-    connectionDrag,
-    panePan,
-    pinchZooming,
-    selectionBoxRect,
-    previewSelectedNodeIds,
-    updateZoom,
-    getRenderedNodePosition,
-    getOutputHandlePoint,
-    getInputHandlePoint,
-    getCanvasSize,
-    setNodeElementRef,
-    setEdgePathRef,
-    setEdgeDeleteButtonRef,
-    startPanePan,
-    movePanePan,
-    endPanePan,
-    cancelPanePan,
-    leavePanePan,
-    handleCanvasWheel,
-    startNodeDrag,
-    moveNodeDrag,
-    endNodeDrag,
-    cancelNodeDrag,
-    startConnectionDrag,
-    moveConnectionDrag,
-    endConnectionDrag,
-    cancelConnectionDrag,
-  } = workflowCanvas;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1537,7 +1598,12 @@ export function ProductDetailPage() {
       if (!workflow) {
         return;
       }
-      if (previewImage || pendingDeleteAction || pendingHistoryAction) {
+      if (
+        previewImage ||
+        pendingDeleteAction ||
+        pendingHistoryAction ||
+        templateSaveOpen
+      ) {
         return;
       }
       event.preventDefault();
@@ -1579,6 +1645,10 @@ export function ProductDetailPage() {
         if (!shortcutNodeIds.length) {
           return;
         }
+        if (workflowNodeIdsContainProductContext(shortcutNodeIds)) {
+          setError(t("detail.error.productContextProtected"));
+          return;
+        }
         if (shortcutNodeIds.length === 1) {
           const node = workflow.nodes.find((workflowNode) => workflowNode.id === shortcutNodeIds[0]);
           if (node) {
@@ -1608,12 +1678,12 @@ export function ProductDetailPage() {
     selectedNodeIds,
     structureBusy,
     t,
+    templateSaveOpen,
     workflow,
   ]);
 
   useEffect(() => {
-    const scrollElement = canvasScrollRef.current;
-    if (!scrollElement || !workflow?.nodes.length || !selectedNode) {
+    if (!workflow?.nodes.length || !selectedNode) {
       return;
     }
     if (!mobileCanvasControlsActive) {
@@ -1627,21 +1697,9 @@ export function ProductDetailPage() {
     mobileInitialCanvasViewRef.current = layoutKey;
 
     window.requestAnimationFrame(() => {
-      const currentScrollElement = canvasScrollRef.current;
-      if (!currentScrollElement) {
-        return;
-      }
-      const selectedNodePosition = getRenderedNodePosition(selectedNode);
-      currentScrollElement.scrollLeft = Math.max(
-        0,
-        (selectedNodePosition.x + NODE_WIDTH / 2) * zoom - currentScrollElement.clientWidth / 2,
-      );
-      currentScrollElement.scrollTop = Math.max(
-        0,
-        selectedNodePosition.y * zoom - Math.min(160, currentScrollElement.clientHeight * 0.22),
-      );
+      workflowCanvasRef.current?.centerNode(selectedNode);
     });
-  }, [canvasScrollRef, getRenderedNodePosition, mobileCanvasControlsActive, productId, selectedNode, workflow?.nodes, zoom]);
+  }, [mobileCanvasControlsActive, productId, selectedNode, workflow?.nodes]);
 
   if (productQuery.isLoading) {
     return (
@@ -1665,12 +1723,6 @@ export function ProductDetailPage() {
   const sourceImage = getSourceImageDownload(product, t);
   const latestRun = workflow?.runs[0] ?? null;
   const selectedNodeCancelableRun = getWorkflowNodeCancelableRun(workflow, selectedNode);
-  const canvasSize = getCanvasSize({
-    minWidth: CANVAS_MIN_WIDTH,
-    minHeight: CANVAS_MIN_HEIGHT,
-  });
-  const canvasWidth = canvasSize.width;
-  const canvasHeight = canvasSize.height;
   const posters = historyQuery.data?.poster_variants ?? product.poster_variants;
   const posterSourceAssetIds = buildPosterSourceAssetMap({
     product,
@@ -1685,8 +1737,12 @@ export function ProductDetailPage() {
   const artifactCount = posters.length + referenceAssets.length;
   const selectedReferenceNode =
     selectedNode?.node_type === "reference_image" ? selectedNode : null;
-  const selectedNodeIdSet = new Set(selectedNodeIds);
   const selectedGroupCount = selectedNodeIds.length;
+  const workflowCanvasKeyboardShortcutsActive =
+    !previewImage &&
+    !pendingDeleteAction &&
+    !pendingHistoryAction &&
+    !templateSaveOpen;
   const fillReferenceBusy = bindNodeImageMutation.isPending;
   const queueOverview = queueOverviewQuery.data ?? null;
   const showQueueOverview = Boolean(queueOverview && queueOverview.active_count > 0);
@@ -1710,7 +1766,7 @@ export function ProductDetailPage() {
         aria-label={fullWorkflowRunBusy ? t("detail.workflowRunning") : t("detail.runWorkflow")}
       >
         {fullWorkflowRunBusy ? <Loader2 size={17} className="animate-spin" /> : <Play size={17} />}
-        <span className="mt-1 leading-tight">{fullWorkflowRunBusy ? t("detail.running") : t("detail.run")}</span>
+        <span className="mt-1 leading-tight">{fullWorkflowRunBusy ? t("detail.running") : t("detail.runFullWorkflow")}</span>
       </button>
       <div className="my-1 h-px w-11 self-center bg-slate-700/80" />
       <span className="w-full text-center text-[10px] font-semibold leading-none text-slate-500">
@@ -1790,7 +1846,10 @@ export function ProductDetailPage() {
     { key: "images", label: t("detail.tabImages"), icon: <ImageIcon size={16} /> },
   ];
 
-  const activeSidebarTabItem = sidebarTabItems.find((item) => item.key === activeSidebarTab) ?? sidebarTabItems[2];
+  const activeSidebarTabItem =
+    sidebarTabItems.find((item) => item.key === activeSidebarTab) ??
+    sidebarTabItems.find((item) => item.key === "details") ??
+    sidebarTabItems[0];
   const mobileCanvasModeItems: Array<{
     key: CanvasInteractionMode;
     label: string;
@@ -1950,7 +2009,6 @@ export function ProductDetailPage() {
         ) : null}
 
         <div className="relative flex min-h-0 flex-1 overflow-hidden bg-slate-50 dark:bg-[#0b1220]">
-          <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:18px_18px] dark:bg-[radial-gradient(rgba(148,163,184,0.2)_1px,transparent_1px)]" />
           <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-transparent to-indigo-50/40 dark:from-[#060a12]/78 dark:via-transparent dark:to-[#151f33]/70" />
           <section className="relative z-10 min-w-0 flex-1 overflow-hidden">
             <div data-canvas-control className="pointer-events-none absolute right-3 top-3 z-30 lg:right-4 lg:top-4">
@@ -1964,209 +2022,49 @@ export function ProductDetailPage() {
                 {topChromeCollapsed ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               </button>
             </div>
-            <div
-              ref={canvasScrollRef}
-              className={`h-full touch-none overflow-auto overscroll-contain p-3 lg:p-6 ${
-                selectedGroupCount > 1
-                  ? "pb-[calc(22rem+env(safe-area-inset-bottom))] lg:pb-6"
-                  : "pb-[calc(13rem+env(safe-area-inset-bottom))] lg:pb-6"
-              } ${panePan ? "cursor-grabbing" : pinchZooming ? "cursor-zoom-in" : "cursor-grab"}`}
-              onPointerDown={startPanePan}
-              onPointerMove={movePanePan}
-              onPointerUp={endPanePan}
-              onPointerCancel={cancelPanePan}
-              onPointerLeave={leavePanePan}
-              onLostPointerCapture={cancelPanePan}
-              onClick={handleCanvasBlankClick}
-              onWheel={handleCanvasWheel}
-            >
-              {workflowQuery.isLoading ? (
-                <div className="flex h-full items-center justify-center text-zinc-400 dark:text-slate-500">
-                  <Loader2 size={24} className="animate-spin" />
-                </div>
-              ) : workflow ? (
-                <div className="relative" style={{ width: canvasWidth * zoom, height: canvasHeight * zoom }}>
-                  <div
-                    ref={canvasRef}
-                    className="relative origin-top-left"
-                    style={{ width: canvasWidth, height: canvasHeight, transform: `scale(${zoom})` }}
-                  >
-                    <svg className="pointer-events-none absolute inset-0 h-full w-full">
-                  {workflow.edges.map((edge) => {
-                    const source = workflow.nodes.find(
-                      (node) => node.id === edge.source_node_id,
-                    );
-                    const target = workflow.nodes.find(
-                      (node) => node.id === edge.target_node_id,
-                    );
-                    if (!source || !target) {
-                      return null;
-                    }
-                    const start = getOutputHandlePoint(source);
-                    const end = getInputHandlePoint(target);
-                    return (
-                      <path
-                        key={edge.id}
-                        ref={(element) => setEdgePathRef(edge.id, element)}
-                        d={buildEdgePath(start, end)}
-                        fill="none"
-                        stroke="#94a3b8"
-                        strokeWidth="1.7"
-                      />
-                    );
-                  })}
-                  {connectionDrag ? (
-                    <path
-                      d={buildConnectionDragPath(connectionDrag)}
-                      fill="none"
-                      stroke="#2563eb"
-                      strokeDasharray="6 4"
-                      strokeWidth="2"
-                    />
-                  ) : null}
-                    </svg>
-                    {workflow.edges.map((edge) => {
-                  const source = workflow.nodes.find(
-                    (node) => node.id === edge.source_node_id,
-                  );
-                  const target = workflow.nodes.find(
-                    (node) => node.id === edge.target_node_id,
-                  );
-                  if (!source || !target) {
-                    return null;
-                  }
-                  const start = getOutputHandlePoint(source);
-                  const end = getInputHandlePoint(target);
-                  return (
-                    <button
-                      key={`${edge.id}-delete`}
-                      ref={(element) => setEdgeDeleteButtonRef(edge.id, element)}
-                      type="button"
-                      onClick={() => deleteEdgeMutation.mutate(edge.id)}
-                      disabled={structureBusy}
-                      className="absolute z-20 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-300 bg-white text-[12px] leading-none text-zinc-500 shadow-sm hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:border-slate-600 dark:bg-[#0f1726] dark:text-slate-300 dark:hover:border-red-400/60 dark:hover:bg-red-500/10 dark:hover:text-red-200"
-                      style={{
-                        left: (start.x + end.x) / 2,
-                        top: (start.y + end.y) / 2,
-                      }}
-                      title={t("detail.deleteEdge")}
-                      aria-label={t("detail.deleteEdge")}
-                    >
-                      ×
-                    </button>
-                  );
-                })}
-                    {selectionBoxRect ? (
-                      <div
-                        className="pointer-events-none absolute z-30 rounded-md border border-indigo-400 bg-indigo-500/10 shadow-[0_0_0_1px_rgba(99,102,241,0.12)]"
-                        style={{
-                          left: selectionBoxRect.x,
-                          top: selectionBoxRect.y,
-                          width: selectionBoxRect.width,
-                          height: selectionBoxRect.height,
-                        }}
-                      />
-                    ) : null}
-                    {workflow.nodes.map((node) => (
-                      <WorkflowNodeCard
-                        key={node.id}
-                        node={node}
-                        nodeRef={(element) => setNodeElementRef(node.id, element)}
-                        position={getRenderedNodePosition(node)}
-                        image={getNodeImageDownload(node, product, t)}
-                        primarySelected={node.id === selectedNode?.id}
-                        secondarySelected={selectedNodeIdSet.has(node.id) && node.id !== selectedNode?.id}
-                        previewSelected={previewSelectedNodeIds.includes(node.id)}
-                        dragging={nodeDrag?.nodeIds.includes(node.id) ?? false}
-                        onSelect={(event) => selectNodeFromPointer(node.id, event)}
-                        onStartDrag={(event) => startNodeDrag(node, event)}
-                        onMoveDrag={moveNodeDrag}
-                        onEndDrag={endNodeDrag}
-                        onCancelDrag={cancelNodeDrag}
-                        onStartConnection={(event) =>
-                          startConnectionDrag(node, event)
-                        }
-                        onMoveConnection={moveConnectionDrag}
-                        onEndConnection={endConnectionDrag}
-                        onCancelConnection={cancelConnectionDrag}
-                        onRun={() => void handleRunWorkflow(node.id)}
-                        onDelete={() => handleDeleteNode(node)}
-                        busy={structureBusy}
-                        runActionState={getWorkflowNodeRunActionState(node, {
-                          runSubmissionPending,
-                          pendingStartNodeId,
-                        })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center text-xs text-zinc-500 dark:text-slate-400">
-                  {t("detail.workflowLoadFailed")}
-                </div>
-              )}
-            </div>
-
-            <div data-canvas-control className="pointer-events-none absolute left-3 top-3 z-30 lg:left-4 lg:top-4">
-              <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-zinc-200 bg-white/90 p-1 shadow-sm backdrop-blur dark:border-slate-700/80 dark:bg-[#151f33]/92 dark:shadow-black/20">
-              <button
-                type="button"
-                onClick={() => updateZoom(zoom - 0.1)}
-                className="inline-flex h-11 min-w-11 items-center justify-center rounded px-2 text-xs text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white lg:h-auto lg:min-w-0 lg:py-1"
-                aria-label={t("detail.zoomOut")}
-              >
-                <ZoomOut size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() => updateZoom(1)}
-                className="h-11 min-w-11 rounded px-2 text-xs tabular-nums text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white lg:h-auto lg:min-w-0 lg:py-1"
-                aria-label={t("detail.resetZoom")}
-              >
-                {Math.round(zoom * 100)}%
-              </button>
-              <button
-                type="button"
-                onClick={() => updateZoom(zoom + 0.1)}
-                className="inline-flex h-11 min-w-11 items-center justify-center rounded px-2 text-xs text-zinc-600 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-violet-500/15 dark:hover:text-white lg:h-auto lg:min-w-0 lg:py-1"
-                aria-label={t("detail.zoomIn")}
-              >
-                <ZoomIn size={13} />
-              </button>
-              </div>
-            </div>
+            <WorkflowCanvas
+              ref={workflowCanvasRef}
+              workflow={workflow}
+              isLoading={workflowQuery.isLoading}
+              selectedNodeId={selectedNodeId}
+              selectedNodeIds={selectedNodeIds}
+              structureBusy={structureBusy}
+              mobileInteractionMode={mobileCanvasControlsActive ? mobileCanvasMode : "edit"}
+              mobileCanvasControlsActive={mobileCanvasControlsActive}
+              zoomStorageKey="productflow.workflow.zoom"
+              initialZoom={initialWorkflowCanvasZoom}
+              selectedGroupCount={selectedGroupCount}
+              loadFailedLabel={t("detail.workflowLoadFailed")}
+              deleteEdgeLabel={t("detail.deleteEdge")}
+              inputHandleLabel={t("detail.inputHandle")}
+              outputHandleLabel={t("detail.outputHandle")}
+              zoomOutLabel={t("detail.zoomOut")}
+              resetZoomLabel={t("detail.resetZoom")}
+              zoomInLabel={t("detail.zoomIn")}
+              fitViewLabel={t("detail.fitCanvas")}
+              fitSelectionLabel={t("detail.fitSelection")}
+              canvasControlsLabel={t("detail.canvasControls")}
+              canvasMiniMapLabel={t("detail.canvasMiniMap")}
+              onBlankClick={handleCanvasBlankClick}
+              onSelectNode={selectNodeFromPointer}
+              onNodeDragCompleteSelect={selectNodeForDragStart}
+              getNodeDragGroup={(nodeId) => (selectedNodeIds.includes(nodeId) ? selectedNodeIds : [nodeId])}
+              onSelectionBoxComplete={replaceSelectionFromBox}
+              onNodePositionCommit={commitNodePosition}
+              onConnectionCreate={(input) => createEdgeMutation.mutate(input)}
+              onDeleteEdge={(edgeId) => deleteEdgeMutation.mutate(edgeId)}
+              getNodeActionToolbar={getWorkflowNodeActionToolbar}
+              onNodeAction={executeWorkflowCanvasAction}
+              keyboardShortcutsActive={workflowCanvasKeyboardShortcutsActive}
+              onClearSelection={clearMultiSelection}
+              getNodeImage={(node) => getNodeImageDownload(node, product, t)}
+            />
             {selectedGroupCount > 1 ? (
               <div data-canvas-control className="pointer-events-none absolute bottom-[calc(12.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-30 lg:bottom-auto lg:left-1/2 lg:right-auto lg:top-4 lg:-translate-x-1/2">
                 <div className="pointer-events-auto max-h-[calc(100dvh-16rem)] overflow-y-auto rounded-xl border border-indigo-200 bg-white/95 p-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-950/10 backdrop-blur dark:border-violet-400/50 dark:bg-[#151f33]/95 dark:text-violet-100 dark:shadow-black/30 lg:max-h-none lg:min-w-[22rem] lg:overflow-visible">
                   <div className="flex items-center gap-2">
                     <Check size={16} strokeWidth={2.5} />
                     <span className="mr-auto">{t("detail.selectedCount", { count: selectedGroupCount })}</span>
-                    <button
-                      type="button"
-                      onClick={() => setTemplateSaveOpen((open) => !open)}
-                      disabled={createUserTemplateGroupMutation.isPending}
-                      className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-semibold text-indigo-700 shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/16 dark:text-violet-100 dark:hover:border-violet-300/70 dark:hover:bg-violet-500/25 lg:h-8 lg:px-2.5"
-                    >
-                      {createUserTemplateGroupMutation.isPending ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Save size={14} />
-                      )}
-                      {t("detail.saveTemplate")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDeleteSelectedNodes}
-                      disabled={deleteSelectedNodesMutation.isPending || structureBusy}
-                      className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-600 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/60 dark:hover:bg-red-500/16 dark:hover:text-red-100 lg:h-8 lg:px-2.5"
-                    >
-                      {deleteSelectedNodesMutation.isPending ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Trash2 size={14} />
-                      )}
-                      {t("detail.delete")}
-                    </button>
                     <button
                       type="button"
                       onClick={clearMultiSelection}
@@ -2318,7 +2216,9 @@ export function ProductDetailPage() {
                 </span>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div
+                className="min-h-0 flex-1 overflow-y-auto p-4"
+              >
                 {renderSidebarPanelContent()}
               </div>
             </aside>
@@ -2357,17 +2257,18 @@ export function ProductDetailPage() {
           <div
             role="toolbar"
             aria-label={t("detail.mobileToolbar")}
-            className="mt-1.5 grid grid-cols-6 gap-1"
+            className="mt-1.5 grid grid-cols-7 gap-1"
           >
             <button
               type="button"
               onClick={() => void handleRunWorkflow(undefined)}
               disabled={fullWorkflowRunBusy || !workflow}
               className="inline-flex min-h-14 min-w-0 flex-col items-center justify-center rounded-xl bg-indigo-600 px-1 text-[10px] font-semibold leading-[1.05] text-white shadow-lg shadow-indigo-600/20 transition-colors active:scale-[0.98] hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gradient-to-r dark:from-indigo-500 dark:via-violet-500 dark:to-fuchsia-500 dark:shadow-violet-900/45 dark:ring-1 dark:ring-violet-300/35"
+              title={fullWorkflowRunBusy ? t("detail.workflowRunning") : t("detail.runWorkflow")}
               aria-label={fullWorkflowRunBusy ? t("detail.workflowRunning") : t("detail.runWorkflow")}
             >
               {fullWorkflowRunBusy ? <Loader2 size={17} className="mb-1 shrink-0 animate-spin" /> : <Play size={17} className="mb-1 shrink-0" />}
-              <span className="max-w-full text-center">{fullWorkflowRunBusy ? t("detail.running") : t("detail.run")}</span>
+              <span className="max-w-full text-center">{fullWorkflowRunBusy ? t("detail.running") : t("detail.runFullWorkflow")}</span>
             </button>
             {sidebarTabItems.map((item) => (
             <button
@@ -2398,7 +2299,15 @@ export function ProductDetailPage() {
       >
         <Drawer.Portal>
           <Drawer.Overlay className="fixed inset-0 z-[70] bg-slate-950/42 lg:hidden" />
-          <Drawer.Content className="fixed inset-x-0 bottom-0 z-[71] flex h-[80dvh] max-h-[80dvh] flex-col overflow-hidden rounded-t-[1.5rem] border-t border-slate-200 bg-white shadow-[0_-12px_34px_rgba(15,23,42,0.16)] outline-none dark:border-slate-700 dark:bg-[#0f1726] dark:shadow-[0_-18px_42px_rgba(0,0,0,0.34)] lg:hidden">
+          <Drawer.Content
+            className="fixed inset-x-0 bottom-0 z-[71] flex h-[80dvh] max-h-[80dvh] flex-col overflow-hidden rounded-t-[1.5rem] border-t border-slate-200 bg-white shadow-[0_-12px_34px_rgba(15,23,42,0.16)] outline-none dark:border-slate-700 dark:bg-[#0f1726] dark:shadow-[0_-18px_42px_rgba(0,0,0,0.34)] lg:hidden"
+            onPointerDownOutside={(event) => {
+              const target = event.target;
+              if (target instanceof Element && target.closest("[data-template-preview-dialog]")) {
+                event.preventDefault();
+              }
+            }}
+          >
             <Drawer.Title className="sr-only">{t("detail.mobileDetailsSheet")}</Drawer.Title>
             <Drawer.Handle className="mx-auto mt-2 flex h-7 w-24 items-center justify-center rounded-full text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-500 dark:focus-visible:ring-violet-400">
               <span className="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-slate-600" />
@@ -2408,14 +2317,16 @@ export function ProductDetailPage() {
                 <span className="shrink-0 text-indigo-600 dark:text-violet-200">{activeSidebarTabItem.icon}</span>
                 <span className="truncate text-sm font-semibold text-slate-950 dark:text-white">{activeSidebarTabItem.label}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setMobileDetailsSheetOpen(false)}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition-colors active:scale-[0.98] hover:border-slate-300 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100 dark:focus-visible:ring-violet-400"
-                aria-label={t("detail.closeMobileSheet")}
-              >
-                <X size={18} />
-              </button>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileDetailsSheetOpen(false)}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition-colors active:scale-[0.98] hover:border-slate-300 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-300 dark:hover:border-violet-400/55 dark:hover:text-violet-100 dark:focus-visible:ring-violet-400"
+                  aria-label={t("detail.closeMobileSheet")}
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div
               data-vaul-no-drag

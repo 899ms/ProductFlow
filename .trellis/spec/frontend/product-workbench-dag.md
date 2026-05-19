@@ -31,30 +31,44 @@
 - Supported user-facing node types are `product_context`, `reference_image`, `copy_generation`, and `image_generation`.
 - Product detail/workbench is canvas-first: product context, reference slots, copy, and image generation are graph nodes,
   not permanent fixed columns.
-- Canvas interaction is pointer-first: nodes move by dragging the node body/header and persist via
-  `updateWorkflowNode(...)` on pointer release; pointermove should use `transform`/`translate3d` plus RAF-throttled local
-  drag state or an equivalent no-layout-thrash approach.
+- ProductDetail workbench uses ReactFlow / `@xyflow/react` as the frontend graph renderer and pointer interaction layer.
+  The backend `ProductWorkflow` payload remains the authority for persisted nodes and edges.
+- The main workbench grid background should be rendered with ReactFlow `Background` so the visual canvas grid follows the
+  ReactFlow viewport. Avoid page-level CSS grid overlays for the main workflow canvas.
+- Viewport controls should use ReactFlow `Controls` / `ControlButton` instead of a page-level custom button group. Keep
+  ReactFlow-native zoom in, zoom out, and fit-view behavior where possible; reserve ProductFlow-owned control buttons for
+  business-specific actions such as reset-to-100% display and fitting the selected node group. Localize built-in control
+  and minimap aria labels through ReactFlow `ariaLabelConfig`.
+- Large ProductDetail canvases should use ReactFlow `MiniMap` for desktop overview. Mobile should either hide the minimap
+  or expose it through an explicit mode/entry so it does not cover browse/edit/select touch flows.
+- ReactFlow's internal node/edge store owns live drag coordinates during active pointer movement. ProductDetail and
+  WorkflowCanvas may resync nodes/edges from backend workflow data, selection state, and optimistic drop positions through
+  ReactFlow instance methods, but they must not rebuild the full node array in React state on every drag-frame position
+  event.
+- Canvas interaction is pointer-first: nodes move through ReactFlow drag handling and persist via
+  `updateWorkflowNode(...)` on drag stop. ReactFlow node positions map directly to workflow `position_x` /
+  `position_y`.
 - Active node drag must visually follow the pointer, not merely the eventual persisted coordinate. Do not round active
-  drag coordinates before rendering, and avoid a React-only RAF throttle if it makes the card trail behind pointer events;
-  round only the final persisted `position_x` / `position_y` values on release.
-- If active node drag bypasses per-pointermove React renders by mutating the node DOM transform directly, connected SVG
-  edge paths and their canvas affordances must be updated through DOM refs or an equivalent lightweight path so edges
-  visually follow the dragged node before pointer release.
-- Empty canvas/background areas may be left-button dragged to pan the scrollable workbench viewport by mutating the
-  viewport `scrollLeft` / `scrollTop`. Guard this interaction by target so node drag, edge handles/buttons, node actions,
-  zoom controls, uploads, and panel resize handles do not start background panning.
+  drag coordinates before rendering; round only the final persisted `position_x` / `position_y` values on release.
+- The main workflow canvas is unbounded in both viewport panning and node coordinates. Do not apply frontend-only minimum
+  `position_x` / `position_y` clamps; negative workflow coordinates are valid when the user pans or drags there. New
+  nodes and templates should still be inserted at the current viewport center so they remain visible at creation time.
+- Empty canvas/background areas may be dragged to pan the ReactFlow viewport. Guard node actions, edge handles/buttons,
+  zoom controls, uploads, and panel resize handles so those controls do not start background panning.
 - Mobile canvas interaction uses an explicit `CanvasInteractionMode`:
   `browse`, `edit`, and `select`. Mobile defaults to `browse`; desktop passes `edit` so existing mouse drag and Shift
   selection behavior stay available. In `browse`, one-finger empty-canvas drag pans the viewport and tapping a node selects
   it without starting a node drag. In `edit`, touch/pen users may drag nodes and create connections. In `select`, tapping
-  nodes toggles multi-select without keyboard modifiers, and tapping blank canvas exits the temporary selection mode.
+  nodes toggles multi-select without keyboard modifiers, one-finger blank-canvas drag still pans the viewport, and tapping
+  blank canvas exits the temporary selection mode. Mobile select mode should not enable ReactFlow's selection rectangle;
+  small touch screens use tap-toggle selection instead of lasso selection.
 - Touch and pen canvas edits must be gated by the active mobile interaction mode. Mouse pointers keep the desktop behavior.
-  Add a small drag threshold before a pending node drag becomes active so tap/select sequences do not persist accidental
-  node movement.
-- Mobile pinch zoom tracks two touch pointers, clamps through the shared workflow zoom bounds, and anchors scroll around
-  the gesture center. Pinch has higher gesture priority than pan, selection box, node drag, and connection drag; entering
-  pinch must cancel those transient states, including any temporary connection line, and restore body `user-select` on
-  pointer cancel, pointer leave, and lost capture paths.
+  ReactFlow may start visual mouse node drag immediately so the node follows the pointer without a dead zone. Keep a small
+  non-zero screen-pixel guard for mouse click suppression and persisted position commits so click jitter does not persist
+  accidental node movement. Touch/pen can keep a larger non-zero visual and commit threshold so tap/select sequences stay
+  stable.
+- Mobile pinch zoom uses ReactFlow viewport zoom, clamps through the shared workflow zoom bounds, and should preserve the
+  gesture center. Pinch has higher gesture priority than pan, selection box, node drag, and connection drag.
 - ProductDetail supports canvas node multi-select through local UI state. Keep `selectedNodeId` as the primary node that
   drives the Details sidebar, draft saving, reference-image fill target, and node-level run/delete/cancel/upload actions.
   Keep `selectedNodeIds` as the selected node group for group actions such as saving a node-group template, group drag,
@@ -69,10 +83,32 @@
   multi-node inspector, or batch-operation panel under the multi-select contract. When more than one node is selected, a
   top-center canvas-control status such as `已选 N` should appear with a prominent red clear-selection button so the
   temporary state is obvious and not hidden by bottom scroll controls.
-- Multi-select hit testing should be based on canvas coordinates so zoom and scroll do not change selection semantics.
-  Use rendered node positions plus measured card bounds when available, and fall back to stable node dimensions in pure
-  helpers. Selection state must reconcile when workflow data changes: deleted nodes are removed, the primary node remains
-  included in `selectedNodeIds`, and a missing primary falls back to another selected node or the first workflow node.
+- Canvas keyboard selection behavior should prefer ReactFlow key props/hooks for local selection and viewport activation:
+  `selectionKeyCode`, `multiSelectionKeyCode`, `panActivationKeyCode`, `zoomActivationKeyCode`, and `useKeyPress` are
+  appropriate for lasso, multi-select modifiers, Space pan activation, Ctrl/Meta zoom activation, and Escape
+  clear-selection. Backend-backed operations such as delete, duplicate, paste, undo, and redo remain ProductDetail-owned
+  shortcuts because they require confirmation, mutation calls, cache updates, or history restoration; keep ReactFlow
+  `deleteKeyCode` disabled unless those contracts are routed through ProductFlow handlers.
+- ProductDetail node/group secondary actions must use one ProductFlow action model rendered through ReactFlow
+  `NodeToolbar` on the selected node. The toolbar is the direct action surface on both desktop and mobile. Do not add a
+  selected-card More button, mobile node action sheet, long-press action path, or ProductFlow desktop right-click context
+  menu for node actions. Single selected reusable nodes expose run, duplicate, fit selected, and delete. A single
+  `product_context` node exposes only fit selected. A selected group exposes duplicate, fit selected, save selected as
+  template, and delete through one toolbar anchored to the primary selected node; secondary selected nodes do not render
+  duplicate toolbars. A group that includes `product_context` exposes only duplicate and fit selected.
+  Toolbar buttons must be icon buttons with `aria-label` and `title`, use `nodrag nopan nowheel`, and stay outside the
+  node-card layout so they do not resize the node card. Actions such as run, duplicate, fit selected, save selected as
+  template, and delete must call existing ProductDetail
+  handlers/mutations: run flushes the selected draft through `handleRunWorkflow`, duplicate uses the backend duplicate
+  mutation, fit selected uses WorkflowCanvas/ReactFlow fit-view helpers, template save opens the existing save-template
+  form/state, and delete opens ProductFlow confirmation before backend mutation. A single `product_context` target should
+  expose only fit-selected; a group that includes `product_context` may duplicate reusable non-product nodes, but should
+  not expose node-group template save or group delete. Keep ReactFlow `deleteKeyCode` disabled and do not locally
+  materialize duplicate or delete results.
+- Multi-select hit testing should be based on canvas coordinates so zoom and pan do not change selection semantics. Use
+  ReactFlow selection events for the main workbench and keep pure helpers for selection reconciliation. Selection state
+  must reconcile when workflow data changes: deleted nodes are removed, the primary node remains included in
+  `selectedNodeIds`, and a missing primary falls back to another selected node or the first workflow node.
 - Treat multi-select as a temporary grouping state, not the default canvas mode. Ordinary non-group actions should collapse
   the group back to a single primary node, including blank-canvas click, adding a node, deleting a node or edge, creating
   an edge, uploading/filling a reference image, or applying a node-group template. Future save-as-template and deliberate
@@ -83,17 +119,23 @@
 - Pointer release must not flash the node back to its stale server position. Keep the final drag coordinates in an
   optimistic position layer and update the `['product-workflow', productId]` cache before/while the PATCH is in flight;
   clear the optimistic entry after the server response becomes the authority, or restore the previous cache on error.
+- Pointer releases below the ProductFlow click/commit guard must restore ReactFlow internal node positions to their drag
+  start positions and skip persisted position mutations.
 - If the same node is dropped again before an earlier position mutation resolves, protect the latest optimistic position
   from stale mutation success/error handlers; serialize or version position mutations so older responses cannot overwrite
   the newest drop and cause a one-frame old-position flash.
 - Dragging any node in a multi-selected group should move every selected node by the same canvas delta, keep internal
-  spacing, update connected edges while dragging, clamp the whole group to the canvas minimum, and persist each moved node
-  through the normal `updateWorkflowNode(...)` position mutation. Position mutation success must not overwrite other
-  pending group positions with stale full-workflow responses.
-- Edges are created by dragging an output handle to a target handle/node and showing a temporary SVG connection while
-  dragging.
-- Edge deletion is a canvas action and must call `deleteWorkflowEdge(edgeId)` before refreshing
-  `['product-workflow', productId]`; do not leave stale local-only edge state.
+  spacing, let ReactFlow update connected edges while dragging, allow the group to move through the unbounded canvas
+  coordinate space, and persist each moved node through the normal `updateWorkflowNode(...)` position mutation. Position
+  mutation success must not overwrite other pending group positions with stale full-workflow responses.
+- Edges are created by dragging a ReactFlow output handle to a target handle/node. The visible temporary connection line is
+  rendered by ReactFlow.
+- Connection-drag handle highlighting should use ReactFlow native connection state, such as `useConnection` or
+  ReactFlow-provided handle connection classes. Do not reimplement connection drag, draw a custom temporary connection
+  path, or bypass ProductFlow's existing `onConnect` / `isValidConnection` / backend edge mutation path.
+- Edge deletion is a canvas action and should use ReactFlow `EdgeToolbar` or an equivalent ReactFlow edge child for the
+  delete affordance. It must call `deleteWorkflowEdge(edgeId)` before refreshing `['product-workflow', productId]`; do
+  not leave stale local-only edge state.
 - Node deletion is a persisted canvas action and must call `deleteWorkflowNode(nodeId)` before refreshing
   `['product-workflow', productId]`; deleting a node must not be represented by local-only filtering because connected
   edges and run history cleanup are backend responsibilities.
@@ -332,10 +374,12 @@ Filter editable/action targets before interpreting canvas shortcuts.
   after a page reload.
 - Base: after dragging a node and releasing the pointer, the rendered node stays at the dropped position while the
   position mutation is pending; it must not briefly render the old `position_x` / `position_y`.
-- Base: dragging an empty canvas/background area pans the viewport, while dragging a node still persists node coordinates
-  and clicking edge/delete/run/upload/zoom controls does not move the viewport.
-- Base: Shift-dragging an empty canvas area draws a temporary selection rectangle and replaces the selected node group,
-  while a normal empty-canvas drag still pans.
+- Base: dragging an empty canvas/background area pans the ReactFlow viewport, while dragging a node still persists node
+  coordinates and clicking edge/delete/run/upload/zoom controls does not move the viewport.
+- Base: on desktop, Shift-dragging an empty canvas area uses the ReactFlow selection rectangle and replaces the selected
+  node group, while a normal empty-canvas drag still pans.
+- Base: on mobile, select mode uses tap-toggle multi-select, keeps empty-canvas drag as viewport pan, and does not show a
+  selection rectangle.
 - Base: multi-selecting nodes does not turn Details into a batch editor; `selectedNodeId` remains the primary node and
   `selectedNodeIds` remains the group for future template saving or batch actions.
 - Base: clicking a secondary selected node opens that node in Details while keeping the group selected; clicking blank
@@ -372,8 +416,9 @@ Filter editable/action targets before interpreting canvas shortcuts.
   refresh, node deletion, and product list deletion error/success states.
 - Drag-position regressions should cover the render priority: active drag position, then optimistic dropped position, then
   server workflow position.
-- Multi-select regressions should cover rectangle normalization/intersection, node hit testing with measured/fallback
-  bounds, modifier-toggle behavior, lasso replacement behavior, and selection reconciliation after workflow node changes.
+- Multi-select regressions should cover desktop rectangle normalization/intersection, node hit testing with
+  measured/fallback bounds, modifier-toggle behavior, lasso replacement behavior, mobile tap-toggle behavior, and
+  selection reconciliation after workflow node changes.
 - Multi-select regressions should also cover secondary-node focus and clearing the group for ordinary non-group actions.
 - User-template regressions should cover saving from `selectedNodeIds`, invalidating `["canvas-templates"]`, showing
   user-only rename/delete actions, confirming archival, and applying user templates through the same template-group API as
@@ -485,15 +530,17 @@ pending state for individual node run actions, while keeping layout dragging ind
 - Image-node inspector copy should only show the downstream reference-slot requirement when no slot is connected; do not
   show internal graph counts such as upstream-node totals. Node cards should show status and any failure reason, not
   generated-summary prose, raw coordinates, or image previews for `image_generation` nodes.
-- Canvas zoom transforms visual coordinates, but pointer hit-testing and drag persistence must convert client coordinates back
-  into unscaled workflow coordinates.
-- Mouse wheel events inside the canvas viewport should zoom the canvas instead of scrolling the viewport. Use the shared
-  zoom bounds and `productflow.workflow.zoom` persistence, anchor the zoom around the mouse position by adjusting
-  `scrollLeft` / `scrollTop`, and keep controls/forms/buttons from triggering unexpected zoom.
-- If wheel zoom defers scroll anchoring through a planned view/ref, every plan must be applied or cleared even when React
-  coalesces state updates; stale planned scroll offsets must not affect later pointer-to-canvas coordinate conversion.
-- Canvas zoom controls must be a floating overlay anchored inside the canvas viewport (not a toolbar item in the scrollable
-  canvas content), and must avoid the right-sidebar resize handle and tool rail.
+- ReactFlow viewport zoom transforms visual coordinates, while drag persistence must keep backend positions in unscaled
+  workflow coordinates.
+- Mouse wheel and pinch events inside the canvas viewport should zoom the ReactFlow canvas within shared zoom bounds and
+  persist the value under `productflow.workflow.zoom`. Controls/forms/buttons should not trigger unexpected zoom.
+- The shared minimum zoom must be low enough for mobile all-nodes overview. Do not set a floor such as 50% that prevents
+  ReactFlow `fitView` from fitting the current workflow into a narrow mobile viewport.
+- Canvas zoom controls must be a floating overlay anchored inside the ReactFlow canvas viewport through ReactFlow `Panel`
+  or an equivalent ReactFlow child component. Zoom display should read ReactFlow viewport state through native hooks such
+  as `useViewport`, and durable zoom persistence should be tied to ReactFlow viewport change end events.
+- Canvas view-fitting controls should use ReactFlow instance viewport helpers such as `fitView` with node id filters for
+  all-nodes and selected-node focus. Do not calculate viewport transforms manually for these standard view operations.
 - Run history and downloadable images live in the right sidebar, not in a persistent bottom panel, so the canvas keeps its
   vertical working space.
 
@@ -505,7 +552,7 @@ pending state for individual node run actions, while keeping layout dragging ind
 ### 5. Good/Base/Bad Cases
 - Good: edit image instruction, immediately click run, and backend receives the new instruction.
 - Base: resize the right sidebar, refresh, and see the same local width.
-- Base: scroll the canvas content and the zoom controls stay visually anchored over the canvas viewport.
+- Base: pan or zoom the canvas and the zoom controls stay visually anchored over the canvas viewport.
 - Bad: showing generated image preview/download on an `image_generation` node instead of on linked reference slots.
 - Bad: placing zoom controls in the top toolbar or scrollable canvas flow so they move with workflow content.
 

@@ -11,7 +11,7 @@ from productflow_backend.application.admission import (
     get_queued_generation_positions,
     get_workflow_run_queue_metadata,
 )
-from productflow_backend.domain.enums import WorkflowNodeType
+from productflow_backend.domain.enums import WorkflowNodeType, WorkflowRunStatus
 from productflow_backend.domain.errors import NotFoundError
 from productflow_backend.domain.workflow_rules import WorkflowRuleEdge, WorkflowRuleNode, topological_node_ids
 from productflow_backend.infrastructure.db.models import (
@@ -300,4 +300,13 @@ def topological_nodes(workflow: ProductWorkflow) -> list[WorkflowNode]:
 
 
 def latest_workflow_runs(workflow: ProductWorkflow, limit: int = 10) -> list[WorkflowRun]:
-    return sorted(workflow.runs, key=lambda item: item.started_at, reverse=True)[:limit]
+    return sorted(
+        workflow.runs,
+        key=lambda item: (
+            item.started_at,
+            item.status == WorkflowRunStatus.RUNNING,
+            item.finished_at or item.started_at,
+            item.id,
+        ),
+        reverse=True,
+    )[:limit]

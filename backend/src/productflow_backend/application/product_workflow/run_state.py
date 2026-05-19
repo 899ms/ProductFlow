@@ -15,7 +15,7 @@ from productflow_backend.application.time import now_utc
 from productflow_backend.domain.durable_generation_tasks import WORKFLOW_RUN_GENERATION_TASK_CONTRACT
 from productflow_backend.domain.enums import WorkflowNodeStatus, WorkflowRunStatus
 from productflow_backend.infrastructure.db.models import WorkflowNode, WorkflowNodeRun, WorkflowRun
-from productflow_backend.infrastructure.queue import enqueue_workflow_run_later
+from productflow_backend.infrastructure.queue import enqueue_workflow_node_run_later, enqueue_workflow_run_later
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,50 @@ def requeue_workflow_run_after_capacity_wait(run_id: str) -> None:
         enqueue_workflow_run_later(run_id, delay_ms=PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)
     except Exception:  # noqa: BLE001
         logger.exception("商品工作流等待并发容量后重新入队失败: workflow_run_id=%s", run_id)
+
+
+def requeue_workflow_node_run_after_capacity_wait(node_run_id: str) -> None:
+    try:
+        enqueue_workflow_node_run_later(node_run_id, delay_ms=PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)
+    except Exception:  # noqa: BLE001
+        logger.exception("商品工作流节点等待并发容量后重新入队失败: workflow_node_run_id=%s", node_run_id)
+
+
+def mark_workflow_node_run_failed(
+    session: Session,
+    *,
+    node_run_id: str,
+    reason: str,
+    is_retryable: bool = True,
+    retry_hint: str | None = None,
+    failure_category: str | None = None,
+) -> str | None:
+    node_run = session.get(WorkflowNodeRun, node_run_id)
+    if node_run is None:
+        return None
+    run = node_run.workflow_run
+    if WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_terminal(run.status):
+        return None
+    now = now_utc()
+    node = session.get(WorkflowNode, node_run.node_id)
+    if node is not None:
+        node.status = WorkflowNodeStatus.FAILED
+        node.failure_reason = reason
+        node.last_run_at = now
+    node_run.status = WorkflowNodeStatus.FAILED
+    node_run.failure_reason = reason
+    node_run.finished_at = now
+    current_metadata = run.progress_metadata if isinstance(run.progress_metadata, dict) else {}
+    if current_metadata.get("last_failure_retryable") is not False or not is_retryable:
+        run.progress_metadata = workflow_run_failure_progress_metadata(
+            reason=reason,
+            retryable=is_retryable,
+            retry_hint=retry_hint,
+            failure_category=failure_category,
+        )
+    run.workflow.updated_at = now
+    session.commit()
+    return run.id
 
 
 def mark_workflow_run_failed(

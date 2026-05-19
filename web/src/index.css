@@ -12,6 +12,31 @@ body,
   min-height: 100%;
 }
 
+html {
+  overflow-y: scroll;
+  scrollbar-color: rgb(148 163 184 / 0.75) rgb(241 245 249);
+  scrollbar-gutter: stable;
+}
+
+html::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+html::-webkit-scrollbar-track {
+  background: rgb(241 245 249);
+}
+
+html::-webkit-scrollbar-thumb {
+  border: 3px solid rgb(241 245 249);
+  border-radius: 999px;
+  background: rgb(100 116 139 / 0.8);
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: rgb(71 85 105 / 0.92);
+}
+
 body {
   margin: 0;
   background: white;
@@ -35,6 +60,20 @@ textarea {
 
 :root.dark {
   color-scheme: dark;
+  scrollbar-color: rgb(148 163 184 / 0.72) rgb(15 23 42);
+}
+
+:root.dark::-webkit-scrollbar-track {
+  background: rgb(15 23 42);
+}
+
+:root.dark::-webkit-scrollbar-thumb {
+  border-color: rgb(15 23 42);
+  background: rgb(148 163 184 / 0.66);
+}
+
+:root.dark::-webkit-scrollbar-thumb:hover {
+  background: rgb(203 213 225 / 0.78);
 }
 
 :root.dark .bg-white {
@@ -136,6 +175,48 @@ textarea {
   display: none;
 }
 
+.product-create-scrollbar {
+  scrollbar-color: rgb(148 163 184 / 0.65) rgb(226 232 240 / 0.7);
+  scrollbar-width: thin;
+}
+
+.product-create-scrollbar::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.product-create-scrollbar::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgb(226 232 240 / 0.7);
+}
+
+.product-create-scrollbar::-webkit-scrollbar-thumb {
+  border: 3px solid rgb(226 232 240 / 0.7);
+  border-radius: 999px;
+  background: rgb(100 116 139 / 0.78);
+}
+
+.product-create-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgb(71 85 105 / 0.88);
+}
+
+:root.dark .product-create-scrollbar {
+  scrollbar-color: rgb(148 163 184 / 0.72) rgb(15 23 42 / 0.92);
+}
+
+:root.dark .product-create-scrollbar::-webkit-scrollbar-track {
+  background: rgb(15 23 42 / 0.92);
+}
+
+:root.dark .product-create-scrollbar::-webkit-scrollbar-thumb {
+  border-color: rgb(15 23 42 / 0.92);
+  background: rgb(148 163 184 / 0.66);
+}
+
+:root.dark .product-create-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgb(203 213 225 / 0.78);
+}
+
 .mobile-generation-sheet[data-vaul-drawer] {
   transition-duration: 180ms !important;
   animation-duration: 180ms !important;
@@ -143,4 +224,60 @@ textarea {
 
 .mobile-generation-sheet[data-vaul-drawer][data-state="open"] {
   will-change: auto !important;
+}
+
+.workflow-canvas-controls {
+  overflow: hidden;
+  border: 1px solid rgb(228 228 231 / 0.95);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.9);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.1);
+  backdrop-filter: blur(12px);
+  --xy-controls-box-shadow: none;
+  --xy-controls-button-background-color: transparent;
+  --xy-controls-button-background-color-hover: rgb(250 250 250);
+  --xy-controls-button-color: rgb(82 82 91);
+  --xy-controls-button-color-hover: rgb(39 39 42);
+  --xy-controls-button-border-color: rgb(228 228 231);
+}
+
+.workflow-canvas-controls .react-flow__controls-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.workflow-canvas-controls .react-flow__controls-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.workflow-canvas-minimap {
+  overflow: hidden;
+  border: 1px solid rgb(228 228 231 / 0.95);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.1);
+}
+
+@media (min-width: 1024px) {
+  .workflow-canvas-controls .react-flow__controls-button {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+:root.dark .workflow-canvas-controls {
+  border-color: rgb(51 65 85 / 0.8);
+  background: rgb(21 31 51 / 0.92);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.2);
+  --xy-controls-button-background-color-hover: rgb(139 92 246 / 0.15);
+  --xy-controls-button-color: rgb(203 213 225);
+  --xy-controls-button-color-hover: rgb(255 255 255);
+  --xy-controls-button-border-color: rgb(51 65 85 / 0.82);
+}
+
+:root.dark .workflow-canvas-minimap {
+  border-color: rgb(51 65 85 / 0.8);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.2);
 }

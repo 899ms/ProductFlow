@@ -190,6 +190,13 @@ Routes that require auth use `dependencies=[Depends(require_admin)]` on the rout
 `presentation/routes/products.py`, `presentation/routes/image_sessions.py`, `presentation/routes/product_workflows.py`,
 and `presentation/routes/settings.py`.
 
+`presentation/api.py` registers `presentation/session.py::ClockStableSessionMiddleware` for signed cookie sessions. It is
+a thin wrapper around Starlette's session middleware that keeps the timestamp signer monotonic within the process. This
+preserves normal `max_age` expiry while preventing a brief wall-clock rollback from making a freshly issued session cookie
+look future-dated and unauthenticated. Large clock jumps are not retained after the wall clock recovers, so the middleware
+does not keep signing cookies with a stale future timestamp. Keep rollback regression tests green when touching this
+middleware.
+
 ---
 
 ## Upload and Resource Boundary Errors

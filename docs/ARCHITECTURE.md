@@ -111,7 +111,7 @@ PostgreSQL 是元数据和运行状态的权威存储；Redis/Dramatiq 只负责
 - `product_context`：一个商品工作流的商品资料入口。
 - `reference_image`：单张当前参考图槽位；手动上传或上游生图填充会替换当前图，旧素材保留在商品历史/素材表。
 - `copy_generation`：文案生成和可编辑结构化文案；后续生图直接读取结构化文案上下文。
-- `image_generation`：生图触发/配置节点；图片产物填充到下游参考图节点，而不是在生图节点本身展示。
+- `image_generation`：生图触发/配置节点；图片产物填充到下游参考图节点，生图节点本身只保存触发与配置语义。
 
 画布模板的边界：
 
@@ -219,8 +219,8 @@ Secret 类配置在 API 响应中不回显已有值。
 
 当前安全模型是“单管理员自托管”：
 
-- 管理员密钥登录，不是公开注册。
-- `ADMIN_ACCESS_KEY` 只从环境变量读取，不进入数据库配置；登录门禁可通过 `admin_access_required` 运行时开关关闭，但默认保持开启。
+- 管理员密钥登录用于私有工作台访问控制。
+- `ADMIN_ACCESS_KEY` 只从环境变量读取，不进入数据库配置；登录门禁可通过 `admin_access_required` 运行时开关关闭，默认保持开启。
 - 配置页使用独立的 `SETTINGS_ACCESS_TOKEN` 二次解锁；session 只保存已解锁标记，不保存令牌明文。关闭登录门禁不会关闭这个二次解锁。
 - Session cookie 由 `SESSION_SECRET` 签名。
 - CORS 由 `BACKEND_CORS_ORIGINS` 控制。

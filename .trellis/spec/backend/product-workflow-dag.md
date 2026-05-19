@@ -621,6 +621,9 @@ returns the normal `ProductWorkflow`.
 - Base: selected-node execution planning is a DB-free domain rule fed by an application/query-layer reusable-edge
   decision. The domain rule decides which missing upstream node types are required; the query layer decides whether an
   existing `CopySet`, `PosterVariant`, or `SourceAsset` actually belongs to the workflow product.
+- Base: image-node reusable artifact detection must accept both `poster_variant_ids` and
+  `generated_poster_variant_ids` in node `output_json`, then validate those IDs against first-class `PosterVariant` rows
+  for the same product before skipping an upstream image node.
 - Bad: add an edge from an image node back to a copy node; the cycle validator rejects it before commit.
 
 ### 6. Tests Required
@@ -654,8 +657,9 @@ returns the normal `ProductWorkflow`.
   reaches generated copy/provider input.
 - API regression edits a generated copy node through `PATCH /api/workflow-nodes/{node_id}/copy` and asserts both the
   persisted `CopySet` and node output summary fields are updated.
-- API regression for selected-node runs first creates successful upstream outputs, then runs a downstream node and asserts
-  upstream node runs/artifacts are not duplicated when reusable outputs exist.
+- API regression for selected-node runs creates successful upstream outputs, runs a downstream node, and asserts upstream
+  node runs/artifacts are not duplicated when reusable outputs exist, including image-node outputs that expose
+  `generated_poster_variant_ids`.
 - API regression for selected reference-slot runs connects an already successful image node to a new empty
   `reference_image` slot and asserts only the necessary image node plus target slot run; copy generation must not re-run.
 - Unit regression for workflow domain rules covers selected-node planning / missing-upstream decisions without creating a
@@ -993,7 +997,7 @@ Centralize text extraction before JSON parsing so every text provider method sup
 - Concurrent duplicate active node-run insert hits the partial unique index -> rollback, reload existing overlapping
   active run, return it.
 - Global running capacity full during worker claim -> keep the workflow run `running`, keep the next node run `queued`, do
-  not call providers, and enqueue delayed retry of the same `workflow_run_id`.
+  not call providers, and enqueue delayed retry of the same `workflow_node_run_id`.
 - Redis enqueue failure after the run has been created -> mark the run `failed`, release active node-run uniqueness slots,
   and return `503` with `任务队列暂不可用，请稍后重试`.
 - Workflow image provider timeout -> mark the active run and image node run `failed`, set `finished_at`, use

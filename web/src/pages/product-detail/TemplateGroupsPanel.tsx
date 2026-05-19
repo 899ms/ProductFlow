@@ -5,12 +5,15 @@ import {
   ImageIcon,
   ImagePlus,
   Loader2,
+  Maximize2,
   Pencil,
   Plus,
   Trash2,
+  X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { localizeCanvasTemplateSummary } from "../../lib/canvasTemplateLocalization";
 import type { TranslationKey } from "../../lib/i18n";
@@ -18,12 +21,35 @@ import { useI18n } from "../../lib/preferences";
 import type { CanvasTemplateSummary } from "../../lib/types";
 import { localizedWorkflowNodeTypeLabel } from "./nodeDisplay";
 
-const PREVIEW_VIEWBOX_WIDTH = 420;
-const PREVIEW_VIEWBOX_HEIGHT = 214;
-const PREVIEW_PADDING_X = 22;
-const PREVIEW_PADDING_Y = 22;
-const PREVIEW_NODE_WIDTH = 76;
-const PREVIEW_NODE_HEIGHT = 50;
+const PREVIEW_METRICS = {
+  viewBoxWidth: 420,
+  viewBoxHeight: 214,
+  paddingX: 22,
+  paddingY: 22,
+  nodeWidth: 76,
+  nodeHeight: 50,
+} as const;
+
+const DIALOG_PREVIEW_METRICS = {
+  viewBoxWidth: 720,
+  viewBoxHeight: 360,
+  paddingX: 48,
+  paddingY: 48,
+  nodeWidth: 132,
+  nodeHeight: 74,
+  minColumnGap: 72,
+  minRowGap: 34,
+  useIndexedRows: true,
+} as const;
+
+const COMPACT_PREVIEW_METRICS = {
+  viewBoxWidth: 420,
+  viewBoxHeight: 154,
+  paddingX: 30,
+  paddingY: 24,
+  nodeWidth: 54,
+  nodeHeight: 42,
+} as const;
 
 const TEMPLATE_CATEGORY_ORDER = [
   { key: "all", labelKey: "detail.template.all" },
@@ -114,7 +140,40 @@ interface TemplatePreviewLayout {
   nodesByKey: Map<string, PreviewNode>;
 }
 
-function buildTemplatePreviewLayout(template: CanvasTemplateSummary): TemplatePreviewLayout | null {
+interface TemplatePreviewMetrics {
+  viewBoxWidth: number;
+  viewBoxHeight: number;
+  paddingX: number;
+  paddingY: number;
+  nodeWidth: number;
+  nodeHeight: number;
+  useIndexedRows?: boolean;
+}
+
+function dialogPreviewMetricsForTemplate(template: CanvasTemplateSummary): TemplatePreviewMetrics {
+  const columns = Math.max(1, new Set(template.preview_nodes.map((node) => node.position_x)).size);
+  const rows = Math.max(1, new Set(template.preview_nodes.map((node) => node.position_y)).size);
+  return {
+    ...DIALOG_PREVIEW_METRICS,
+    viewBoxWidth: Math.max(
+      DIALOG_PREVIEW_METRICS.viewBoxWidth,
+      DIALOG_PREVIEW_METRICS.paddingX * 2
+        + DIALOG_PREVIEW_METRICS.nodeWidth
+        + (columns - 1) * (DIALOG_PREVIEW_METRICS.nodeWidth + DIALOG_PREVIEW_METRICS.minColumnGap),
+    ),
+    viewBoxHeight: Math.max(
+      DIALOG_PREVIEW_METRICS.viewBoxHeight,
+      DIALOG_PREVIEW_METRICS.paddingY * 2
+        + DIALOG_PREVIEW_METRICS.nodeHeight
+        + (rows - 1) * (DIALOG_PREVIEW_METRICS.nodeHeight + DIALOG_PREVIEW_METRICS.minRowGap),
+    ),
+  };
+}
+
+function buildTemplatePreviewLayout(
+  template: CanvasTemplateSummary,
+  metrics: TemplatePreviewMetrics = PREVIEW_METRICS,
+): TemplatePreviewLayout | null {
   const nodes = template.preview_nodes;
   if (!nodes.length) {
     return null;
@@ -122,27 +181,38 @@ function buildTemplatePreviewLayout(template: CanvasTemplateSummary): TemplatePr
 
   // Keep only column relationships in the compact preview so wide templates remain legible.
   const sortedUniqueX = Array.from(new Set(nodes.map((node) => node.position_x))).sort((a, b) => a - b);
+  const sortedUniqueY = Array.from(new Set(nodes.map((node) => node.position_y))).sort((a, b) => a - b);
   const minY = Math.min(...nodes.map((node) => node.position_y));
   const maxY = Math.max(...nodes.map((node) => node.position_y));
-  const availableWidth = PREVIEW_VIEWBOX_WIDTH - PREVIEW_PADDING_X * 2 - PREVIEW_NODE_WIDTH;
-  const availableHeight = PREVIEW_VIEWBOX_HEIGHT - PREVIEW_PADDING_Y * 2 - PREVIEW_NODE_HEIGHT;
+  const availableWidth = metrics.viewBoxWidth - metrics.paddingX * 2 - metrics.nodeWidth;
+  const availableHeight = metrics.viewBoxHeight - metrics.paddingY * 2 - metrics.nodeHeight;
   const columnGap = sortedUniqueX.length <= 1 ? 0 : availableWidth / (sortedUniqueX.length - 1);
+  const rowGap = sortedUniqueY.length <= 1 ? 0 : availableHeight / (sortedUniqueY.length - 1);
 
   const layoutNodes = nodes.map((node) => {
     const columnIndex = sortedUniqueX.indexOf(node.position_x);
+    const rowIndex = sortedUniqueY.indexOf(node.position_y);
     const yRatio = minY === maxY ? 0.5 : (node.position_y - minY) / (maxY - minY);
     const x = sortedUniqueX.length <= 1
-      ? (PREVIEW_VIEWBOX_WIDTH - PREVIEW_NODE_WIDTH) / 2
-      : PREVIEW_PADDING_X + columnIndex * columnGap;
-    const y = minY === maxY
-      ? (PREVIEW_VIEWBOX_HEIGHT - PREVIEW_NODE_HEIGHT) / 2
-      : PREVIEW_PADDING_Y + yRatio * availableHeight;
+      ? (metrics.viewBoxWidth - metrics.nodeWidth) / 2
+      : metrics.paddingX + columnIndex * columnGap;
+    const y = metrics.useIndexedRows
+      ? (
+          sortedUniqueY.length <= 1
+            ? (metrics.viewBoxHeight - metrics.nodeHeight) / 2
+            : metrics.paddingY + rowIndex * rowGap
+        )
+      : (
+          minY === maxY
+            ? (metrics.viewBoxHeight - metrics.nodeHeight) / 2
+            : metrics.paddingY + yRatio * availableHeight
+        );
     return {
       ...node,
       x,
       y,
-      centerX: x + PREVIEW_NODE_WIDTH / 2,
-      centerY: y + PREVIEW_NODE_HEIGHT / 2,
+      centerX: x + metrics.nodeWidth / 2,
+      centerY: y + metrics.nodeHeight / 2,
     };
   });
   return {
@@ -184,19 +254,36 @@ function previewNodeMeta(nodeType: CanvasTemplateSummary["preview_nodes"][number
   return { icon: iconByType[nodeType], label: localizedWorkflowNodeTypeLabel(nodeType, t), status: statusByType[nodeType] };
 }
 
-function edgePath(source: PreviewNode, target: PreviewNode): string {
-  const sourceX = target.centerX >= source.centerX ? source.x + PREVIEW_NODE_WIDTH : source.x;
-  const targetX = target.centerX >= source.centerX ? target.x : target.x + PREVIEW_NODE_WIDTH;
+function compactPreviewNodeLabel(nodeType: CanvasTemplateSummary["preview_nodes"][number]["node_type"], t: TFunction) {
+  const labelByType: Record<CanvasTemplateSummary["preview_nodes"][number]["node_type"], TranslationKey> = {
+    product_context: "detail.template.compact.productContext",
+    reference_image: "detail.template.compact.referenceImage",
+    copy_generation: "detail.template.compact.copyGeneration",
+    image_generation: "detail.template.compact.imageGeneration",
+  };
+  return t(labelByType[nodeType]);
+}
+
+function edgePath(source: PreviewNode, target: PreviewNode, metrics: TemplatePreviewMetrics = PREVIEW_METRICS): string {
+  const sourceX = target.centerX >= source.centerX ? source.x + metrics.nodeWidth : source.x;
+  const targetX = target.centerX >= source.centerX ? target.x : target.x + metrics.nodeWidth;
   const controlOffset = Math.max(20, Math.abs(targetX - sourceX) * 0.45);
   const sourceControlX = sourceX + (target.centerX >= source.centerX ? controlOffset : -controlOffset);
   const targetControlX = targetX - (target.centerX >= source.centerX ? controlOffset : -controlOffset);
   return `M ${sourceX} ${source.centerY} C ${sourceControlX} ${source.centerY}, ${targetControlX} ${target.centerY}, ${targetX} ${target.centerY}`;
 }
 
-function TemplateGraphPreview({ template }: { template: CanvasTemplateSummary }) {
+export function TemplateGraphPreview({
+  template,
+  variant = "panel",
+}: {
+  template: CanvasTemplateSummary;
+  variant?: "panel" | "dialog";
+}) {
   const { locale, t } = useI18n();
   const displayTemplate = localizeCanvasTemplateSummary(template, locale);
-  const layout = buildTemplatePreviewLayout(displayTemplate);
+  const metrics = variant === "dialog" ? dialogPreviewMetricsForTemplate(displayTemplate) : PREVIEW_METRICS;
+  const layout = buildTemplatePreviewLayout(displayTemplate, metrics);
   if (layout === null) {
     return (
       <div className="flex h-36 items-center justify-center border-b border-dashed border-zinc-200 bg-zinc-50 text-[11px] text-zinc-400 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-500">
@@ -226,12 +313,24 @@ function TemplateGraphPreview({ template }: { template: CanvasTemplateSummary })
     <div
       role="img"
       aria-label={t("detail.template.previewAria", { title: displayTemplate.title })}
-      className="relative h-52 overflow-hidden border-b border-zinc-100 bg-zinc-50 dark:border-slate-700 dark:bg-[#0b1220]"
+      className={
+        variant === "dialog"
+          ? "pointer-events-none relative overflow-hidden bg-zinc-50 dark:bg-[#0b1220]"
+          : "relative h-52 overflow-hidden border-b border-zinc-100 bg-zinc-50 dark:border-slate-700 dark:bg-[#0b1220]"
+      }
+      style={
+        variant === "dialog"
+          ? {
+              width: `${metrics.viewBoxWidth}px`,
+              height: `${metrics.viewBoxHeight}px`,
+            }
+          : undefined
+      }
     >
       <svg
         aria-hidden="true"
         className="absolute inset-0 h-full w-full"
-        viewBox={`0 0 ${PREVIEW_VIEWBOX_WIDTH} ${PREVIEW_VIEWBOX_HEIGHT}`}
+        viewBox={`0 0 ${metrics.viewBoxWidth} ${metrics.viewBoxHeight}`}
         preserveAspectRatio="none"
       >
         <defs>
@@ -250,12 +349,12 @@ function TemplateGraphPreview({ template }: { template: CanvasTemplateSummary })
             <path d="M 0 0 L 6 3 L 0 6 z" fill="#6366f1" />
           </marker>
         </defs>
-        <rect width={PREVIEW_VIEWBOX_WIDTH} height={PREVIEW_VIEWBOX_HEIGHT} className="fill-zinc-50 dark:fill-[#0b1220]" />
-        <rect width={PREVIEW_VIEWBOX_WIDTH} height={PREVIEW_VIEWBOX_HEIGHT} fill={`url(#${gridId})`} opacity="0.85" />
+        <rect width={metrics.viewBoxWidth} height={metrics.viewBoxHeight} className="fill-zinc-50 dark:fill-[#0b1220]" />
+        <rect width={metrics.viewBoxWidth} height={metrics.viewBoxHeight} fill={`url(#${gridId})`} opacity="0.85" />
         {edges.map(({ edge, source, target }) => (
           <path
             key={`${edge.source_node_key}->${edge.target_node_key}`}
-            d={edgePath(source, target)}
+            d={edgePath(source, target, metrics)}
             fill="none"
             markerEnd={`url(#${arrowId})`}
             stroke="#6366f1"
@@ -274,10 +373,10 @@ function TemplateGraphPreview({ template }: { template: CanvasTemplateSummary })
             aria-label={`${node.title} ${meta.label}`}
             className="absolute rounded-lg border border-slate-200 bg-white/95 p-1.5 text-left shadow-sm backdrop-blur dark:border-slate-700 dark:bg-[#151f33]/95"
             style={{
-              left: `${(node.x / PREVIEW_VIEWBOX_WIDTH) * 100}%`,
-              top: `${(node.y / PREVIEW_VIEWBOX_HEIGHT) * 100}%`,
-              width: `${(PREVIEW_NODE_WIDTH / PREVIEW_VIEWBOX_WIDTH) * 100}%`,
-              height: `${(PREVIEW_NODE_HEIGHT / PREVIEW_VIEWBOX_HEIGHT) * 100}%`,
+              left: `${(node.x / metrics.viewBoxWidth) * 100}%`,
+              top: `${(node.y / metrics.viewBoxHeight) * 100}%`,
+              width: `${(metrics.nodeWidth / metrics.viewBoxWidth) * 100}%`,
+              height: `${(metrics.nodeHeight / metrics.viewBoxHeight) * 100}%`,
             }}
           >
             <span className="absolute left-[-4px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border border-slate-300 bg-white shadow-sm dark:border-slate-500 dark:bg-[#0b1220]" />
@@ -288,16 +387,16 @@ function TemplateGraphPreview({ template }: { template: CanvasTemplateSummary })
                   <Icon size={11} strokeWidth={2} />
                 </span>
                 <div className="min-w-0">
-                  <div className="truncate text-[10px] font-semibold leading-3 text-zinc-900 dark:text-slate-100">
-                    {truncatePreviewTitle(node.title)}
+                  <div className={`${variant === "dialog" ? "text-xs leading-4" : "text-[10px] leading-3"} truncate font-semibold text-zinc-900 dark:text-slate-100`}>
+                    {truncatePreviewTitle(node.title, variant === "dialog" ? 18 : 7)}
                   </div>
-                  <div className="mt-0.5 text-[7px] font-medium uppercase leading-none text-zinc-400 dark:text-slate-400">
+                  <div className={`${variant === "dialog" ? "text-[9px] leading-3" : "text-[7px] leading-none"} mt-0.5 font-medium uppercase text-zinc-400 dark:text-slate-400`}>
                     {meta.label}
                   </div>
                 </div>
               </div>
             </div>
-            <span className="mt-1 inline-flex rounded-full border border-zinc-200 bg-white px-1 py-0 text-[7px] font-medium leading-3 text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300">
+            <span className={`${variant === "dialog" ? "mt-2 px-1.5 text-[9px] leading-4" : "mt-1 px-1 text-[7px] leading-3"} inline-flex rounded-full border border-zinc-200 bg-white py-0 font-medium text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300`}>
               {meta.status}
             </span>
           </div>
@@ -305,6 +404,244 @@ function TemplateGraphPreview({ template }: { template: CanvasTemplateSummary })
       })}
     </div>
   );
+}
+
+function CompactTemplateGraphPreview({
+  template,
+  onOpenPreview,
+}: {
+  template: CanvasTemplateSummary;
+  onOpenPreview: () => void;
+}) {
+  const { locale, t } = useI18n();
+  const displayTemplate = localizeCanvasTemplateSummary(template, locale);
+  const layout = buildTemplatePreviewLayout(displayTemplate, COMPACT_PREVIEW_METRICS);
+
+  if (layout === null) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenPreview}
+        className="flex h-28 w-full items-center justify-center bg-zinc-50 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-100 dark:bg-[#0b1220] dark:text-slate-500 dark:hover:bg-slate-900"
+      >
+        {t("detail.template.noPreview")}
+      </button>
+    );
+  }
+
+  const templateId = displayTemplate.key.replace(/[^a-zA-Z0-9_-]/g, "-");
+  const arrowId = `compact-template-preview-arrow-${templateId}`;
+  const gridId = `compact-template-preview-grid-${templateId}`;
+  const edges = displayTemplate.preview_edges
+    .map((edge) => ({
+      edge,
+      source: layout.nodesByKey.get(edge.source_node_key),
+      target: layout.nodesByKey.get(edge.target_node_key),
+    }))
+    .filter(
+      (item): item is {
+        edge: CanvasTemplateSummary["preview_edges"][number];
+        source: PreviewNode;
+        target: PreviewNode;
+      } => Boolean(item.source && item.target),
+    );
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenPreview}
+      aria-label={t("detail.template.openPreview", { title: displayTemplate.title })}
+      title={t("detail.template.openPreview", { title: displayTemplate.title })}
+      className="group relative block aspect-[16/7] min-h-28 w-full overflow-hidden bg-zinc-50 text-left transition-colors hover:bg-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-[#0b1220] dark:hover:bg-slate-900"
+    >
+      <svg
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full"
+        viewBox={`0 0 ${COMPACT_PREVIEW_METRICS.viewBoxWidth} ${COMPACT_PREVIEW_METRICS.viewBoxHeight}`}
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <pattern id={gridId} width="14" height="14" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.7" className="fill-zinc-300 dark:fill-slate-600" />
+          </pattern>
+          <marker
+            id={arrowId}
+            markerHeight="6"
+            markerUnits="strokeWidth"
+            markerWidth="6"
+            orient="auto"
+            refX="5"
+            refY="3"
+          >
+            <path d="M 0 0 L 6 3 L 0 6 z" fill="#6366f1" />
+          </marker>
+        </defs>
+        <rect
+          width={COMPACT_PREVIEW_METRICS.viewBoxWidth}
+          height={COMPACT_PREVIEW_METRICS.viewBoxHeight}
+          className="fill-zinc-50 dark:fill-[#0b1220]"
+        />
+        <rect
+          width={COMPACT_PREVIEW_METRICS.viewBoxWidth}
+          height={COMPACT_PREVIEW_METRICS.viewBoxHeight}
+          fill={`url(#${gridId})`}
+          opacity="0.85"
+        />
+        {edges.map(({ edge, source, target }) => (
+          <path
+            key={`${edge.source_node_key}->${edge.target_node_key}`}
+            d={edgePath(source, target, COMPACT_PREVIEW_METRICS)}
+            fill="none"
+            markerEnd={`url(#${arrowId})`}
+            stroke="#6366f1"
+            strokeLinecap="round"
+            strokeOpacity="0.7"
+            strokeWidth="2"
+          />
+        ))}
+      </svg>
+      {layout.nodes.map((node) => {
+        const meta = previewNodeMeta(node.node_type, t);
+        const Icon = meta.icon;
+        return (
+          <span
+            key={node.key}
+            className="absolute flex flex-col items-center justify-center gap-0.5 rounded-lg border border-slate-200 bg-white/95 text-center text-[9px] font-semibold leading-none text-slate-700 shadow-sm backdrop-blur transition-transform group-hover:scale-[1.02] dark:border-slate-700 dark:bg-[#151f33]/95 dark:text-slate-100"
+            style={{
+              left: `${(node.x / COMPACT_PREVIEW_METRICS.viewBoxWidth) * 100}%`,
+              top: `${(node.y / COMPACT_PREVIEW_METRICS.viewBoxHeight) * 100}%`,
+              width: `${(COMPACT_PREVIEW_METRICS.nodeWidth / COMPACT_PREVIEW_METRICS.viewBoxWidth) * 100}%`,
+              height: `${(COMPACT_PREVIEW_METRICS.nodeHeight / COMPACT_PREVIEW_METRICS.viewBoxHeight) * 100}%`,
+            }}
+          >
+            <Icon size={13} strokeWidth={2} className="text-indigo-500 dark:text-violet-300" />
+            <span className="max-w-full truncate px-0.5">{compactPreviewNodeLabel(node.node_type, t)}</span>
+          </span>
+        );
+      })}
+      <span className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white/90 text-zinc-500 shadow-sm opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 dark:border-slate-700 dark:bg-[#151f33]/90 dark:text-slate-300">
+        <Maximize2 size={13} />
+      </span>
+    </button>
+  );
+}
+
+function TemplatePreviewDialog({
+  template,
+  onClose,
+}: {
+  template: CanvasTemplateSummary;
+  onClose: () => void;
+}) {
+  const { locale, t } = useI18n();
+  const titleId = useId();
+  const previewScrollRef = useRef<HTMLDivElement | null>(null);
+  const previewDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    scrollLeft: number;
+    scrollTop: number;
+  } | null>(null);
+  const displayTemplate = localizeCanvasTemplateSummary(template, locale);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const dialog = (
+    <div
+      data-template-preview-dialog
+      data-vaul-no-drag
+      className="pointer-events-auto fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="flex max-h-[88dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/25 dark:border-slate-700 dark:bg-[#0f1726] dark:shadow-black/50"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-5">
+          <div className="min-w-0">
+            <h2 id={titleId} className="truncate text-base font-semibold text-slate-950 dark:text-white">
+              {t("detail.template.previewDialogTitle", { title: displayTemplate.title })}
+            </h2>
+            {displayTemplate.description ? (
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-300">
+                {displayTemplate.description}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            aria-label={t("detail.preview.close")}
+            title={t("detail.preview.close")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div
+          ref={previewScrollRef}
+          data-vaul-no-drag
+          className="min-h-0 flex-1 cursor-grab touch-pan-x touch-pan-y overflow-auto overscroll-contain active:cursor-grabbing [-webkit-overflow-scrolling:touch]"
+          onPointerDown={(event) => {
+            if (event.button !== 0 && event.pointerType === "mouse") {
+              return;
+            }
+            previewDragRef.current = {
+              pointerId: event.pointerId,
+              startX: event.clientX,
+              startY: event.clientY,
+              scrollLeft: event.currentTarget.scrollLeft,
+              scrollTop: event.currentTarget.scrollTop,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={(event) => {
+            const drag = previewDragRef.current;
+            const scroller = previewScrollRef.current;
+            if (!drag || !scroller || drag.pointerId !== event.pointerId) {
+              return;
+            }
+            const deltaX = event.clientX - drag.startX;
+            const deltaY = event.clientY - drag.startY;
+            scroller.scrollLeft = drag.scrollLeft - deltaX;
+            scroller.scrollTop = drag.scrollTop - deltaY;
+            if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+              event.preventDefault();
+            }
+          }}
+          onPointerUp={(event) => {
+            if (previewDragRef.current?.pointerId === event.pointerId) {
+              previewDragRef.current = null;
+            }
+          }}
+          onPointerCancel={(event) => {
+            if (previewDragRef.current?.pointerId === event.pointerId) {
+              previewDragRef.current = null;
+            }
+          }}
+        >
+          <TemplateGraphPreview template={displayTemplate} variant="dialog" />
+        </div>
+      </div>
+    </div>
+  );
+
+  return typeof document === "undefined" ? dialog : createPortal(dialog, document.body);
 }
 
 export function TemplateGroupsPanel({
@@ -324,6 +661,7 @@ export function TemplateGroupsPanel({
   const [editingTitle, setEditingTitle] = useState("");
   const [activeCategory, setActiveCategory] = useState<TemplateCategoryKey>("all");
   const [expandedTemplateKey, setExpandedTemplateKey] = useState<string | null>(templates[0]?.key ?? null);
+  const [previewTemplate, setPreviewTemplate] = useState<CanvasTemplateSummary | null>(null);
 
   useEffect(() => {
     if (!templates.length) {
@@ -510,7 +848,7 @@ export function TemplateGroupsPanel({
             </div>
             {expanded ? (
               <div className="border-t border-zinc-100 dark:border-slate-700">
-                <TemplateGraphPreview template={displayTemplate} />
+                <CompactTemplateGraphPreview template={displayTemplate} onOpenPreview={() => setPreviewTemplate(template)} />
               </div>
             ) : null}
             {editing ? (
@@ -552,6 +890,9 @@ export function TemplateGroupsPanel({
         );
       })}
       </div>
+      {previewTemplate ? (
+        <TemplatePreviewDialog template={previewTemplate} onClose={() => setPreviewTemplate(null)} />
+      ) : null}
     </section>
   );
 }

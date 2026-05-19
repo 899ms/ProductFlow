@@ -38,10 +38,12 @@ from productflow_backend.application.product_workflow.mutations import get_or_cr
 from productflow_backend.application.product_workflow.query import WorkflowQueryService
 from productflow_backend.application.product_workflow.run_state import (
     WORKFLOW_CANCELLED_REASON,
+    WorkflowSafeExecutionError,
     claim_workflow_node_run,
+    mark_workflow_node_run_failed,
     mark_workflow_run_cancelled,
     mark_workflow_run_failed,
-    requeue_workflow_run_after_capacity_wait,
+    requeue_workflow_node_run_after_capacity_wait,
     workflow_node_failed_run_is_retryable,
     workflow_run_failure_context,
     workflow_run_failure_progress_metadata,
@@ -63,6 +65,7 @@ from productflow_backend.domain.errors import BusinessError, BusinessValidationE
 from productflow_backend.domain.workflow_rules import (
     WorkflowRuleEdge,
     WorkflowRuleNode,
+    ready_workflow_node_ids,
     selected_node_execution_plan,
     should_execute_missing_upstream,
 )
@@ -76,7 +79,7 @@ from productflow_backend.infrastructure.db.models import (
     WorkflowRun,
 )
 from productflow_backend.infrastructure.db.session import get_session_factory
-from productflow_backend.infrastructure.queue import enqueue_workflow_run
+from productflow_backend.infrastructure.queue import enqueue_workflow_node_run, enqueue_workflow_run
 from productflow_backend.infrastructure.storage import LocalStorage
 
 logger = logging.getLogger(__name__)
@@ -143,20 +146,18 @@ def _latest_failed_workflow_run(workflow: ProductWorkflow) -> WorkflowRun | None
     )
 
 
-def _workflow_run_retry_start_node_id(run: WorkflowRun) -> str | None:
-    started_node_ids = {
+def _workflow_run_retry_node_ids(run: WorkflowRun) -> set[str] | None:
+    retry_node_ids = {
         node_run.node_id
         for node_run in run.node_runs
-        if node_run.status != WorkflowNodeStatus.FAILED or node_run.failure_reason != "上游节点失败"
+        if node_run.status == WorkflowNodeStatus.FAILED and node_run.failure_reason != WORKFLOW_CANCELLED_REASON
     }
-    if not started_node_ids:
+    if not retry_node_ids:
         return None
-    workflow = run.workflow
-    ordered_nodes = product_workflow_graph.topological_nodes(workflow)
-    ordered_started_nodes = [node for node in ordered_nodes if node.id in started_node_ids]
-    if not ordered_started_nodes or len(ordered_started_nodes) == len(ordered_nodes):
+    ordered_nodes = product_workflow_graph.topological_nodes(run.workflow)
+    if len(retry_node_ids) == len(ordered_nodes):
         return None
-    return ordered_started_nodes[-1].id
+    return retry_node_ids
 
 
 def start_product_workflow_run(
@@ -165,8 +166,10 @@ def start_product_workflow_run(
     product_id: str,
     start_node_id: str | None = None,
     progress_metadata: dict[str, Any] | None = None,
+    node_ids_to_run_override: set[str] | None = None,
 ) -> WorkflowRunKickoff:
     workflow = get_or_create_product_workflow(session, product_id)
+    session.expire(workflow, ["nodes", "edges", "runs"])
     ordered_nodes = product_workflow_graph.topological_nodes(workflow)
     if start_node_id is not None:
         start_node = next((node for node in workflow.nodes if node.id == start_node_id), None)
@@ -178,7 +181,11 @@ def start_product_workflow_run(
             and not workflow_node_failed_run_is_retryable(start_node, workflow.runs)
         ):
             raise BusinessValidationError("该工作流节点不可重试")
-    node_ids_to_run = _node_ids_to_run(session, workflow, start_node_id)
+    node_ids_to_run = (
+        node_ids_to_run_override
+        if node_ids_to_run_override is not None
+        else _node_ids_to_run(session, workflow, start_node_id)
+    )
     if not node_ids_to_run:
         raise BusinessValidationError("工作流没有可运行节点")
     active_run = _active_workflow_run_for_nodes(workflow, node_ids_to_run)
@@ -256,17 +263,29 @@ def retry_product_workflow_run(
         raise BusinessValidationError("只有失败的工作流运行可以重试")
     if not run.is_retryable:
         raise BusinessValidationError("该工作流运行不可重试")
-    start_node_id = _workflow_run_retry_start_node_id(run)
-    node_ids_to_run = _node_ids_to_run(session, workflow, start_node_id)
+    retry_node_ids = _workflow_run_retry_node_ids(run)
+    node_ids_to_run = retry_node_ids if retry_node_ids is not None else _node_ids_to_run(session, workflow, None)
     if _active_workflow_run_for_nodes(workflow, node_ids_to_run) is not None:
         raise BusinessValidationError("相关节点运行中，不能重试")
-    return submit_product_workflow_run(
+    kickoff = start_product_workflow_run(
         session,
         product_id=product_id,
-        start_node_id=start_node_id,
-        enqueue=enqueue,
         progress_metadata=_workflow_run_retry_progress_metadata(run),
+        node_ids_to_run_override=retry_node_ids,
     )
+    if kickoff.should_enqueue:
+        enqueue_or_mark_failed(
+            kickoff.run_id,
+            enqueue=lambda task_id: (enqueue or enqueue_workflow_run)(task_id),
+            mark_failed=lambda task_id, reason: mark_workflow_run_enqueue_failed(
+                session,
+                run_id=task_id,
+                reason=reason,
+            ),
+        )
+        session.expire_all()
+        return product_workflow_graph.get_workflow_or_raise(session, kickoff.workflow.id)
+    return kickoff.workflow
 
 
 def cancel_product_workflow_run(
@@ -297,7 +316,18 @@ def run_product_workflow(
 ) -> ProductWorkflow:
     kickoff = start_product_workflow_run(session, product_id=product_id, start_node_id=start_node_id)
     if kickoff.created:
-        execute_product_workflow_run(kickoff.run_id, dependencies=dependencies)
+        _execute_product_workflow_run(
+            session,
+            run_id=kickoff.run_id,
+            dependencies=dependencies,
+            enqueue_node_run=lambda node_run_id: _execute_workflow_node_run(
+                session,
+                node_run_id=node_run_id,
+                dependencies=dependencies,
+                schedule_after_finish=False,
+            ),
+            return_after_dispatch=False,
+        )
         session.expire_all()
         return product_workflow_graph.get_workflow_or_raise(session, kickoff.workflow.id)
     return kickoff.workflow
@@ -321,7 +351,11 @@ def submit_product_workflow_run(
         enqueue_or_mark_failed(
             kickoff.run_id,
             enqueue=enqueue or enqueue_workflow_run,
-            mark_failed=lambda run_id, reason: mark_workflow_run_enqueue_failed(session, run_id=run_id, reason=reason),
+            mark_failed=lambda run_id, reason: mark_workflow_run_enqueue_failed(
+                session,
+                run_id=run_id,
+                reason=reason,
+            ),
         )
     return kickoff.workflow
 
@@ -372,6 +406,26 @@ def execute_product_workflow_run(
         session.close()
 
 
+def execute_product_workflow_node_run(
+    node_run_id: str,
+    *,
+    dependencies: WorkflowExecutionDependencies | None = None,
+) -> None:
+    session_factory = get_session_factory()
+    session = session_factory()
+    try:
+        try:
+            _execute_workflow_node_run(session, node_run_id=node_run_id, dependencies=dependencies)
+        except TimeLimitExceeded as exc:
+            session.rollback()
+            _mark_node_run_failed_and_schedule(session, node_run_id=node_run_id, exc=exc)
+        except Exception as exc:  # noqa: BLE001
+            session.rollback()
+            _mark_node_run_failed_and_schedule(session, node_run_id=node_run_id, exc=exc)
+    finally:
+        session.close()
+
+
 def mark_workflow_run_enqueue_failed(session: Session, *, run_id: str, reason: str) -> None:
     """Mark a just-created workflow run failed when its durable queue message cannot be sent."""
 
@@ -388,7 +442,10 @@ def _execute_product_workflow_run(
     *,
     run_id: str,
     dependencies: WorkflowExecutionDependencies | None = None,
+    enqueue_node_run: Callable[[str], None] | None = None,
+    return_after_dispatch: bool = True,
 ) -> None:
+    dispatch_node_run = enqueue_node_run or enqueue_workflow_node_run
     queries = WorkflowQueryService(session)
     run = session.get(WorkflowRun, run_id)
     if run is None:
@@ -396,105 +453,298 @@ def _execute_product_workflow_run(
     if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_running(run.status):
         return
     workflow = queries.get_workflow_or_raise(run.workflow_id)
-    ordered_nodes = product_workflow_graph.topological_nodes(workflow)
-    run_node_ids = {node_run.node_id for node_run in run.node_runs}
-    node_runs_by_node_id = {node_run.node_id: node_run for node_run in run.node_runs}
-    if any(WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status) for node_run in run.node_runs):
-        return
+    rule_nodes = _workflow_rule_nodes(workflow)
+    rule_edges = _workflow_rule_edges(workflow)
 
-    for ordered_node in ordered_nodes:
-        session.expire(run, ["status"])
+    while True:
+        session.expire(run, ["status", "node_runs"])
+        session.refresh(run)
         if run.status == WorkflowRunStatus.CANCELLED:
             return
         if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_running(run.status):
             return
-        if ordered_node.id not in run_node_ids:
-            continue
-        node = queries.get_node_or_raise(ordered_node.id)
-        node_run = node_runs_by_node_id.get(node.id)
-        if node_run is None:
-            continue
-        session.refresh(node_run)
-        if WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status):
-            return
-        if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status):
-            continue
-        claim = claim_workflow_node_run(session, node_run_id=node_run.id, node_id=node.id)
-        if not claim.claimed:
-            if claim.should_requeue:
-                requeue_workflow_run_after_capacity_wait(run_id)
-            return
-        node = queries.get_node_or_raise(ordered_node.id)
-        node_run = session.get(WorkflowNodeRun, node_run.id)
-        if node_run is None:
-            return
-        try:
-            logger.info(
-                "开始执行工作流节点: run_id=%s node_id=%s node_type=%s",
-                run_id,
-                node.id,
-                node.node_type.value,
-            )
-            output = _execute_node(session, workflow_id=workflow.id, node=node, dependencies=dependencies)
-        except TimeLimitExceeded as exc:
-            session.rollback()
-            failure = workflow_run_failure_context(exc)
-            mark_workflow_run_failed(
-                session,
-                run_id=run_id,
-                failed_node_id=ordered_node.id,
-                **failure,
-            )
-            return
-        except Exception as exc:  # noqa: BLE001
-            session.rollback()
-            failure = workflow_run_failure_context(exc)
-            mark_workflow_run_failed(
-                session,
-                run_id=run_id,
-                failed_node_id=ordered_node.id,
-                **failure,
-            )
+        node_runs = list(run.node_runs)
+
+        node_runs_by_node_id = {node_run.node_id: node_run for node_run in node_runs}
+        queued_node_ids = {
+            node_run.node_id
+            for node_run in node_runs
+            if WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status)
+        }
+        succeeded_node_ids = {
+            node_run.node_id for node_run in node_runs if node_run.status == WorkflowNodeStatus.SUCCEEDED
+        }
+        if _finalize_workflow_run_if_terminal(session, run=run):
             return
 
-        session.refresh(run)
-        session.refresh(node_run)
-        if run.status == WorkflowRunStatus.CANCELLED:
-            session.rollback()
-            return
-        if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status):
-            session.rollback()
-            return
+        ready_node_ids = ready_workflow_node_ids(
+            nodes=rule_nodes,
+            edges=rule_edges,
+            run_node_ids=node_runs_by_node_id.keys(),
+            queued_node_ids=queued_node_ids,
+            succeeded_node_ids=succeeded_node_ids,
+        )
+        if ready_node_ids:
+            for ready_node_id in ready_node_ids:
+                node_run = node_runs_by_node_id.get(ready_node_id)
+                if node_run is None:
+                    continue
+                try:
+                    dispatch_node_run(node_run.id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.exception("工作流节点运行入队失败: workflow_node_run_id=%s", node_run.id)
+                    failure = workflow_run_failure_context(exc)
+                    mark_workflow_run_failed(session, run_id=run_id, failed_node_id=None, **failure)
+                    return
+            if return_after_dispatch:
+                return
+            continue
 
-        node.output_json = output
-        node.status = WorkflowNodeStatus.SUCCEEDED
-        node.failure_reason = None
-        node.last_run_at = now_utc()
-        node_run.status = WorkflowNodeStatus.SUCCEEDED
-        node_run.output_json = output
-        node_run.copy_set_id = output.get("copy_set_id")
-        if isinstance(output.get("generated_poster_variant_ids"), list):
-            poster_ids = output["generated_poster_variant_ids"]
-        else:
-            poster_ids = output.get("poster_variant_ids") if isinstance(output.get("poster_variant_ids"), list) else []
-        node_run.poster_variant_id = poster_ids[0] if poster_ids else output.get("poster_variant_id")
-        node_run.image_session_asset_id = output.get("image_session_asset_id")
-        node_run.finished_at = now_utc()
-        workflow.updated_at = now_utc()
-        session.commit()
-        logger.info("工作流节点执行成功: run_id=%s node_id=%s", run_id, node.id)
+        if _mark_blocked_workflow_node_runs_failed(session, run=run, workflow=workflow):
+            continue
+        if any(WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status) for node_run in node_runs):
+            return
+        mark_workflow_run_failed(
+            session,
+            run_id=run_id,
+            failed_node_id=None,
+            reason="工作流调度失败：没有可执行的就绪节点",
+        )
+        return
 
-    persisted_run = queries.workflow_run_with_node_runs(run_id)
-    if (
-        persisted_run is not None
-        and persisted_run.status == WorkflowRunStatus.RUNNING
-        and persisted_run.node_runs
-        and all(node_run.status == WorkflowNodeStatus.SUCCEEDED for node_run in persisted_run.node_runs)
-    ):
-        persisted_run.status = WorkflowRunStatus.SUCCEEDED
-        persisted_run.finished_at = now_utc()
-        logger.info("工作流运行成功: run_id=%s workflow_id=%s", run_id, persisted_run.workflow_id)
+
+def _execute_workflow_node_run(
+    session: Session,
+    *,
+    node_run_id: str,
+    dependencies: WorkflowExecutionDependencies | None = None,
+    schedule_after_finish: bool = True,
+) -> None:
+    queries = WorkflowQueryService(session)
+    node_run = session.get(WorkflowNodeRun, node_run_id)
+    if node_run is None:
+        return
+    run = node_run.workflow_run
+    if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_running(run.status):
+        return
+    if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status):
+        return
+    workflow = queries.get_workflow_or_raise(run.workflow_id)
+    node = queries.get_node_or_raise(node_run.node_id)
+    claim = claim_workflow_node_run(session, node_run_id=node_run.id, node_id=node.id)
+    if not claim.claimed:
+        if claim.should_requeue:
+            requeue_workflow_node_run_after_capacity_wait(node_run_id)
+        return
+    node = queries.get_node_or_raise(node_run.node_id)
+    node_run = session.get(WorkflowNodeRun, node_run_id)
+    if node_run is None:
+        return
+    try:
+        logger.info(
+            "开始执行工作流节点: run_id=%s node_id=%s node_type=%s",
+            run.id,
+            node.id,
+            node.node_type.value,
+        )
+        output = _execute_node(session, workflow_id=workflow.id, node=node, dependencies=dependencies)
+    except TimeLimitExceeded as exc:
+        session.rollback()
+        _mark_node_run_failed_and_schedule(
+            session,
+            node_run_id=node_run_id,
+            exc=exc,
+            schedule_after_finish=schedule_after_finish,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        _mark_node_run_failed_and_schedule(
+            session,
+            node_run_id=node_run_id,
+            exc=exc,
+            schedule_after_finish=schedule_after_finish,
+        )
+        return
+
+    session.refresh(run)
+    node_run = session.get(WorkflowNodeRun, node_run_id)
+    if node_run is None:
+        session.rollback()
+        return
+    session.refresh(node_run)
+    if run.status == WorkflowRunStatus.CANCELLED:
+        session.rollback()
+        return
+    if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.is_running(run.status):
+        session.rollback()
+        return
+    if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status):
+        session.rollback()
+        return
+
+    node.output_json = output
+    node.status = WorkflowNodeStatus.SUCCEEDED
+    node.failure_reason = None
+    node.last_run_at = now_utc()
+    node_run.status = WorkflowNodeStatus.SUCCEEDED
+    node_run.output_json = output
+    node_run.copy_set_id = output.get("copy_set_id")
+    if isinstance(output.get("generated_poster_variant_ids"), list):
+        poster_ids = output["generated_poster_variant_ids"]
+    else:
+        poster_ids = output.get("poster_variant_ids") if isinstance(output.get("poster_variant_ids"), list) else []
+    node_run.poster_variant_id = poster_ids[0] if poster_ids else output.get("poster_variant_id")
+    node_run.image_session_asset_id = output.get("image_session_asset_id")
+    node_run.finished_at = now_utc()
+    workflow.updated_at = now_utc()
     session.commit()
+    logger.info("工作流节点执行成功: run_id=%s node_id=%s", run.id, node.id)
+    if schedule_after_finish:
+        _enqueue_workflow_run_safely(run.id)
+
+
+def _mark_node_run_failed_and_schedule(
+    session: Session,
+    *,
+    node_run_id: str,
+    exc: BaseException,
+    schedule_after_finish: bool = True,
+) -> None:
+    failure = workflow_run_failure_context(exc)
+    run_id = mark_workflow_node_run_failed(session, node_run_id=node_run_id, **failure)
+    if run_id is not None and schedule_after_finish:
+        _enqueue_workflow_run_safely(run_id)
+
+
+def _enqueue_workflow_run_safely(run_id: str) -> None:
+    try:
+        enqueue_workflow_run(run_id)
+    except Exception:  # noqa: BLE001
+        logger.exception("工作流节点完成后调度运行失败: workflow_run_id=%s", run_id)
+
+
+def _workflow_rule_nodes(workflow: ProductWorkflow) -> list[WorkflowRuleNode]:
+    return [
+        WorkflowRuleNode(
+            id=node.id,
+            node_type=node.node_type,
+            position_x=node.position_x,
+            config_json=node.config_json,
+        )
+        for node in workflow.nodes
+    ]
+
+
+def _workflow_rule_edges(workflow: ProductWorkflow) -> list[WorkflowRuleEdge]:
+    return [
+        WorkflowRuleEdge(source_node_id=edge.source_node_id, target_node_id=edge.target_node_id)
+        for edge in workflow.edges
+    ]
+
+
+def _incoming_node_ids_by_target(rule_edges: list[WorkflowRuleEdge]) -> dict[str, list[str]]:
+    incoming: dict[str, list[str]] = {}
+    for edge in rule_edges:
+        incoming.setdefault(edge.target_node_id, []).append(edge.source_node_id)
+    return incoming
+
+
+def _mark_blocked_workflow_node_runs_failed(
+    session: Session,
+    *,
+    run: WorkflowRun,
+    workflow: ProductWorkflow,
+) -> bool:
+    incoming = _incoming_node_ids_by_target(_workflow_rule_edges(workflow))
+    run_node_ids = {node_run.node_id for node_run in run.node_runs}
+    failed_node_ids = {
+        node_run.node_id for node_run in run.node_runs if node_run.status == WorkflowNodeStatus.FAILED
+    }
+    changed = False
+    while True:
+        changed_this_pass = False
+        now = now_utc()
+        for node_run in run.node_runs:
+            if not WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status):
+                continue
+            has_failed_upstream = any(
+                source_id in run_node_ids and source_id in failed_node_ids
+                for source_id in incoming.get(node_run.node_id, [])
+            )
+            if not has_failed_upstream:
+                continue
+            node = session.get(WorkflowNode, node_run.node_id)
+            if node is not None:
+                node.status = WorkflowNodeStatus.FAILED
+                node.failure_reason = "上游节点失败"
+                node.last_run_at = now
+            node_run.status = WorkflowNodeStatus.FAILED
+            node_run.failure_reason = "上游节点失败"
+            node_run.finished_at = now
+            failed_node_ids.add(node_run.node_id)
+            changed = True
+            changed_this_pass = True
+        if not changed_this_pass:
+            break
+    if changed:
+        run.workflow.updated_at = now_utc()
+        session.commit()
+    return changed
+
+
+def _finalize_workflow_run_if_terminal(session: Session, *, run: WorkflowRun) -> bool:
+    node_runs = list(run.node_runs)
+    if any(
+        WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_queued(node_run.status)
+        or WORKFLOW_RUN_GENERATION_TASK_CONTRACT.execution_is_running(node_run.status)
+        for node_run in node_runs
+    ):
+        return False
+    now = now_utc()
+    if node_runs and all(node_run.status == WorkflowNodeStatus.SUCCEEDED for node_run in node_runs):
+        run.status = WorkflowRunStatus.SUCCEEDED
+        run.finished_at = now
+        run.workflow.updated_at = now
+        logger.info("工作流运行成功: run_id=%s workflow_id=%s", run.id, run.workflow_id)
+        session.commit()
+        return True
+    failed_node_run = next(
+        (
+            node_run
+            for node_run in node_runs
+            if node_run.status == WorkflowNodeStatus.FAILED and node_run.failure_reason != "上游节点失败"
+        ),
+        None,
+    ) or next((node_run for node_run in node_runs if node_run.status == WorkflowNodeStatus.FAILED), None)
+    reason = (
+        failed_node_run.failure_reason
+        if failed_node_run and failed_node_run.failure_reason
+        else "工作流部分节点失败"
+    )
+    failure_metadata = run.progress_metadata if isinstance(run.progress_metadata, dict) else {}
+    is_retryable = failure_metadata.get("last_failure_retryable")
+    if not isinstance(is_retryable, bool):
+        is_retryable = True
+    retry_hint = failure_metadata.get("retry_hint")
+    failure_category = failure_metadata.get("last_failure_category")
+    metadata_reason = failure_metadata.get("last_failure_reason")
+    if is_retryable is False and isinstance(metadata_reason, str):
+        reason = metadata_reason
+    run.status = WorkflowRunStatus.FAILED
+    run.failure_reason = reason
+    run.is_retryable = is_retryable
+    run.progress_metadata = workflow_run_failure_progress_metadata(
+        reason=reason,
+        retryable=is_retryable,
+        retry_hint=retry_hint if isinstance(retry_hint, str) else None,
+        failure_category=failure_category if isinstance(failure_category, str) else None,
+    )
+    run.finished_at = now
+    run.workflow.updated_at = now
+    logger.warning("工作流运行失败: run_id=%s reason=%s", run.id, reason)
+    session.commit()
+    return True
 
 
 def _node_ids_to_run(session: Session, workflow: ProductWorkflow, start_node_id: str | None) -> set[str]:
@@ -561,6 +811,8 @@ def _node_has_reusable_output(
                 reference_node=target_node,
             )
         poster_ids = output.get("poster_variant_ids")
+        if not isinstance(poster_ids, list):
+            poster_ids = output.get("generated_poster_variant_ids")
         filled_ids = output.get("filled_source_asset_ids")
         source_asset_ids = source_asset_ids_from_config(output)
         if isinstance(filled_ids, list):
@@ -568,7 +820,7 @@ def _node_has_reusable_output(
         has_source_assets = _valid_source_asset_ids(session, workflow.product_id, source_asset_ids)
         has_posters = False
         if isinstance(poster_ids, list):
-            posters = queries.posters_by_ids(poster_ids)
+            posters = queries.posters_by_ids([item for item in poster_ids if isinstance(item, str)])
             has_posters = any(poster.product_id == workflow.product_id for poster in posters)
         return has_source_assets or has_posters
     return False
@@ -706,7 +958,7 @@ def _execute_copy_generation(
     )
     incoming_context = collect_incoming_context(workflow, node.id)
     reference_images = reference_image_inputs_for_copy(session, workflow=workflow, node_id=node.id, storage=storage)
-    config = normalize_copy_node_config(node.config_json)
+    config = _normalize_copy_node_config_for_execution(node.config_json)
     instruction = instruction_with_upstream_text(
         config.instruction,
         incoming_context,
@@ -755,6 +1007,18 @@ def _execute_copy_generation(
     }
     output["context_sources"] = incoming_context.text_sources[:8]
     return output
+
+
+def _normalize_copy_node_config_for_execution(raw_config: dict[str, Any] | None):
+    try:
+        return normalize_copy_node_config(raw_config)
+    except (ValidationError, ValueError) as exc:
+        raise WorkflowSafeExecutionError(
+            "文案节点配置无效，请调整节点设置后重试",
+            retryable=False,
+            retry_hint="revise_input",
+            failure_category="invalid_node_config",
+        ) from exc
 
 
 def _generate_brief_with_provider(

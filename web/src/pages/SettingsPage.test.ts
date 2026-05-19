@@ -16,6 +16,7 @@ import {
   settingsImportSummaryCounts,
   settingsSectionIds,
   shouldShowSettingsMigrationPanel,
+  textBindingPayloadFromDraft,
 } from "./SettingsPage";
 import { translate } from "../lib/i18n";
 import type {
@@ -289,6 +290,25 @@ describe("SettingsPage provider profile helpers", () => {
       provider_profile_id: "profile-gemini",
       model_settings: { model: "gemini-2.5-flash-image" },
       config: { gemini_api_version: "v1beta", gemini_output_mime_type: "image/png" },
+    });
+  });
+
+  it("builds text binding payloads with text models only", () => {
+    expect(
+      textBindingPayloadFromDraft({
+        provider_kind: "openai",
+        provider_profile_id: "profile-1",
+        brief_model: " gpt-5.4 ",
+        copy_model: " gpt-5.4 ",
+      }),
+    ).toEqual({
+      provider_kind: "openai",
+      provider_profile_id: "profile-1",
+      model_settings: {
+        brief_model: "gpt-5.4",
+        copy_model: "gpt-5.4",
+      },
+      config: {},
     });
   });
 

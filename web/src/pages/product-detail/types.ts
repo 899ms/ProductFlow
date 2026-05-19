@@ -5,46 +5,7 @@ export type CanvasPoint = {
   y: number;
 };
 
-export type CanvasRect = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
 export type CanvasInteractionMode = "browse" | "edit" | "select";
-
-export type NodeDragState = {
-  nodeId: string;
-  nodeIds: string[];
-  pointerId: number;
-  offsetX: number;
-  offsetY: number;
-  currentX: number;
-  currentY: number;
-  originPositions: Record<string, CanvasPoint>;
-};
-
-export type ConnectionDragState = {
-  sourceNodeId: string;
-  pointerId: number;
-  from: CanvasPoint;
-  to: CanvasPoint;
-};
-
-export type PanePanState = {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  startScrollLeft: number;
-  startScrollTop: number;
-};
-
-export type SelectionBoxState = {
-  pointerId: number;
-  origin: CanvasPoint;
-  current: CanvasPoint;
-};
 
 export type SaveStatus = "idle" | "saving" | "saved" | "failed";
 

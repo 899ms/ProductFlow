@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from productflow_backend.config import get_settings
@@ -32,6 +31,7 @@ from productflow_backend.presentation.routes.image_sessions import router as ima
 from productflow_backend.presentation.routes.product_workflows import router as product_workflows_router
 from productflow_backend.presentation.routes.products import router as products_router
 from productflow_backend.presentation.routes.settings import router as settings_router
+from productflow_backend.presentation.session import ClockStableSessionMiddleware
 
 REQUEST_ID_HEADER = b"x-request-id"
 
@@ -60,7 +60,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(
-        SessionMiddleware,
+        ClockStableSessionMiddleware,
         secret_key=settings.session_secret,
         same_site="lax",
         https_only=settings.session_cookie_secure,

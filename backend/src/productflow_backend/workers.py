@@ -6,7 +6,10 @@ from pathlib import Path
 import dramatiq
 
 from productflow_backend.application.image_sessions import execute_image_session_generation_task
-from productflow_backend.application.product_workflows import execute_product_workflow_run
+from productflow_backend.application.product_workflows import (
+    execute_product_workflow_node_run,
+    execute_product_workflow_run,
+)
 from productflow_backend.config import get_runtime_settings
 from productflow_backend.domain.durable_generation_tasks import (
     IMAGE_SESSION_GENERATION_TASK_CONTRACT,
@@ -45,10 +48,20 @@ PRODUCT_WORKFLOW_WORKER_FAILSAFE_TIME_LIMIT_MS = get_product_workflow_worker_fai
 
 @dramatiq.actor(max_retries=0, time_limit=PRODUCT_WORKFLOW_WORKER_FAILSAFE_TIME_LIMIT_MS)
 def run_product_workflow_run(workflow_run_id: str) -> None:
-    """商品工作流 worker：执行边界内部负责把失败落库。"""
+    """商品工作流 scheduler：发现 ready 节点并派发独立节点任务。"""
     token = set_workflow_run_id(workflow_run_id)
     try:
         execute_product_workflow_run(workflow_run_id)
+    finally:
+        reset_workflow_run_id(token)
+
+
+@dramatiq.actor(max_retries=0, time_limit=PRODUCT_WORKFLOW_WORKER_FAILSAFE_TIME_LIMIT_MS)
+def run_product_workflow_node_run(workflow_node_run_id: str) -> None:
+    """商品工作流节点 worker：执行单个 WorkflowNodeRun，完成后唤醒 scheduler。"""
+    token = set_workflow_run_id(workflow_node_run_id)
+    try:
+        execute_product_workflow_node_run(workflow_node_run_id)
     finally:
         reset_workflow_run_id(token)
 

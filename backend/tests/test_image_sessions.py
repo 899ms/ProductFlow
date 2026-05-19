@@ -1612,7 +1612,8 @@ def test_image_session_branch_uses_selected_base_and_references_only(configured_
         json={"prompt": "第一张基础图", "size": "1024x1024"},
     )
     assert first.status_code == 202
-    first_asset_id = first.json()["rounds"][-1]["generated_asset"]["id"]
+    first_round = next(round_item for round_item in first.json()["rounds"] if round_item["prompt"] == "第一张基础图")
+    first_asset_id = first_round["generated_asset"]["id"]
 
     upload = client.post(
         f"/api/image-sessions/{session_id}/reference-images",
@@ -1637,7 +1638,9 @@ def test_image_session_branch_uses_selected_base_and_references_only(configured_
     )
     assert branched.status_code == 202
     payload = branched.json()
-    branch_round = payload["rounds"][-1]
+    branch_round = next(
+        round_item for round_item in payload["rounds"] if round_item["prompt"] == "只从第一张和第二张参考图继续"
+    )
     assert branch_round["base_asset_id"] == first_asset_id
     assert branch_round["selected_reference_asset_ids"] == [reference_ids[1]]
     assert branch_round["previous_response_id"] is None

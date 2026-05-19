@@ -80,6 +80,20 @@ def enqueue_workflow_run_later(run_id: str, *, delay_ms: int) -> None:
     run_product_workflow_run.send_with_options(args=(run_id,), delay=delay_ms)
 
 
+def enqueue_workflow_node_run(node_run_id: str) -> None:
+    from productflow_backend.workers import run_product_workflow_node_run
+
+    get_broker()
+    run_product_workflow_node_run.send(node_run_id)
+
+
+def enqueue_workflow_node_run_later(node_run_id: str, *, delay_ms: int) -> None:
+    from productflow_backend.workers import run_product_workflow_node_run
+
+    get_broker()
+    run_product_workflow_node_run.send_with_options(args=(node_run_id,), delay=delay_ms)
+
+
 def enqueue_image_session_generation_task(task_id: str) -> None:
     from productflow_backend.workers import run_image_session_generation_task
 

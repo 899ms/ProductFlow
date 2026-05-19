@@ -6,6 +6,7 @@ from productflow_backend.application.contracts import (
     BlocksCopyContent,
     CopyNodeConfigV2,
     CopyPayloadV2,
+    CopySlotRequest,
     FreeformCopyContent,
     LayoutBriefCopyContent,
 )
@@ -16,6 +17,9 @@ def normalize_copy_node_config(raw_config: dict[str, Any] | None) -> CopyNodeCon
     config = raw_config or {}
     instruction = _string_or_empty(config.get("instruction"))
     output_mode = _string_or_none(config.get("output_mode")) or _infer_output_mode(instruction)
+    requested_slots = config.get("requested_slots")
+    if requested_slots is not None and not isinstance(requested_slots, list):
+        raise ValueError("文案 requested_slots 必须是数组")
     return CopyNodeConfigV2.model_validate(
         {
             "version": 2,
@@ -24,9 +28,30 @@ def normalize_copy_node_config(raw_config: dict[str, Any] | None) -> CopyNodeCon
             "channel": _string_or_none(config.get("channel")),
             "tone": _string_or_none(config.get("tone")),
             "output_mode": output_mode,
-            "requested_slots": config.get("requested_slots") if isinstance(config.get("requested_slots"), list) else [],
+            "requested_slots": normalize_copy_slot_requests(requested_slots) if requested_slots is not None else [],
         }
     )
+
+
+def normalize_copy_slot_requests(raw_slots: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_slots, list):
+        raise ValueError("文案 requested_slots 必须是数组")
+    normalized: list[dict[str, Any]] = []
+    for index, raw_slot in enumerate(raw_slots, start=1):
+        if isinstance(raw_slot, CopySlotRequest):
+            normalized.append(raw_slot.model_dump(mode="json"))
+            continue
+        if isinstance(raw_slot, str):
+            label = raw_slot.strip()
+            if not label:
+                raise ValueError("文案 requested_slots 数组项不能为空")
+            normalized.append({"key": f"slot_{index}", "label": label, "required": False, "hint": None})
+            continue
+        if isinstance(raw_slot, dict):
+            normalized.append(CopySlotRequest.model_validate(raw_slot).model_dump(mode="json"))
+            continue
+        raise ValueError("文案 requested_slots 数组项必须是对象或文本")
+    return normalized
 
 
 def normalize_copy_payload(raw_payload: Any, *, fallback_purpose: str | None = None) -> CopyPayloadV2:

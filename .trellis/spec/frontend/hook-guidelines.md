@@ -260,20 +260,20 @@ pages/components need the same behavior. Follow React naming rules (`useSomethin
 
 ### Page-local controller hooks
 
-An oversized route page may extract a page-local controller hook under that page's local directory even before there is
-cross-page reuse, when the hook isolates a cohesive browser interaction boundary and materially reduces route complexity.
-For ProductDetail-style workbench interactions, keep the hook page-local (for example
-`web/src/pages/product-detail/useWorkflowCanvas.ts`) and pass API/cache work in as callbacks instead of hiding TanStack
-Query mutations inside the controller.
+An oversized route page may extract a page-local controller hook or controller component under that page's local directory
+even before there is cross-page reuse, when the extraction isolates a cohesive browser interaction boundary and materially
+reduces route complexity. For ProductDetail-style workbench interactions, keep the boundary page-local (for example
+`web/src/pages/product-detail/WorkflowCanvas.tsx`, or a page-local hook when no component boundary is involved) and pass
+API/cache work in as callbacks instead of hiding TanStack Query mutations inside the controller.
 
 Correct:
 
 ```tsx
-const workflowCanvas = useWorkflowCanvas({
-  workflow,
-  onNodePositionCommit: (input) => updateNodePositionMutation.mutate(input),
-  onConnectionCreate: (input) => createEdgeMutation.mutate(input),
-});
+<WorkflowCanvas
+  workflow={workflow}
+  onNodePositionCommit={(input) => updateNodePositionMutation.mutate(input)}
+  onConnectionCreate={(input) => createEdgeMutation.mutate(input)}
+/>
 ```
 
 Wrong:

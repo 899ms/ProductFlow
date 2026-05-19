@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from productflow_backend.application.canvas_templates import CanvasTemplateNodeSpec
+from productflow_backend.application.copy_payloads import normalize_copy_node_config
 from productflow_backend.application.image_generation_core import normalize_image_generation_tool_options
 from productflow_backend.application.product_workflow import graph as product_workflow_graph
 from productflow_backend.application.product_workflow.artifacts import (
@@ -48,6 +49,16 @@ NODE_GROUP_TEMPLATE_COLLISION_NODE_WIDTH = 248
 NODE_GROUP_TEMPLATE_COLLISION_NODE_HEIGHT = 248
 NODE_GROUP_TEMPLATE_COLLISION_GAP = 32
 NODE_GROUP_TEMPLATE_CONTEXT_ANCHOR_GAP = 220
+
+
+@dataclass(frozen=True, slots=True)
+class AppliedWorkflowTemplateGroup:
+    workflow: ProductWorkflow
+    nodes_by_template_key: dict[str, WorkflowNode]
+
+    @property
+    def workflow_node_ids_by_template_key(self) -> dict[str, str]:
+        return {template_key: node.id for template_key, node in self.nodes_by_template_key.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,8 +152,14 @@ def _active_workflow_run(workflow: ProductWorkflow) -> WorkflowRun | None:
     )
 
 
-def _normalize_node_config(node_type: WorkflowNodeType, config_json: dict[str, Any] | None) -> dict[str, Any]:
+def normalize_workflow_node_config(node_type: WorkflowNodeType, config_json: dict[str, Any] | None) -> dict[str, Any]:
     config = dict(config_json or {})
+    if node_type == WorkflowNodeType.COPY_GENERATION:
+        try:
+            normalized_copy_config = normalize_copy_node_config(config).model_dump(mode="json")
+        except ValueError as exc:
+            raise BusinessValidationError(str(exc)) from exc
+        return {**config, **normalized_copy_config}
     if node_type == WorkflowNodeType.IMAGE_GENERATION:
         try:
             normalized_size = image_size_from_config(config)
@@ -156,6 +173,30 @@ def _normalize_node_config(node_type: WorkflowNodeType, config_json: dict[str, A
                 raw_tool_options if isinstance(raw_tool_options, dict) else None
             )
     return config
+
+
+def apply_workflow_node_patch(
+    node: WorkflowNode,
+    *,
+    title: str | None = None,
+    config_json: dict[str, Any] | None = None,
+) -> bool:
+    changed = False
+    if title is not None:
+        next_title = title.strip() or product_workflow_graph.default_title_for_type(node.node_type)
+        if next_title != node.title:
+            node.title = next_title
+            changed = True
+    if config_json is not None:
+        normalized_config = normalize_workflow_node_config(node.node_type, config_json)
+        config_changed = normalized_config != (node.config_json or {})
+        if config_changed:
+            node.config_json = normalized_config
+            changed = True
+            if node.status == WorkflowNodeStatus.FAILED:
+                node.status = WorkflowNodeStatus.IDLE
+                node.failure_reason = None
+    return changed
 
 
 def get_or_create_product_workflow(session: Session, product_id: str) -> ProductWorkflow:
@@ -222,7 +263,7 @@ def create_workflow_node(
         title=title.strip() or product_workflow_graph.default_title_for_type(node_type),
         position_x=position_x,
         position_y=position_y,
-        config_json=_normalize_node_config(node_type, config_json),
+        config_json=normalize_workflow_node_config(node_type, config_json),
     )
     session.add(node)
     workflow.updated_at = now_utc()
@@ -239,6 +280,26 @@ def apply_node_group_template_to_workflow(
     position_x: int,
     position_y: int,
 ) -> ProductWorkflow:
+    applied = materialize_node_group_template_to_workflow(
+        session,
+        product_id=product_id,
+        template_key=template_key,
+        position_x=position_x,
+        position_y=position_y,
+    )
+    session.commit()
+    session.expire_all()
+    return product_workflow_graph.get_workflow_or_raise(session, applied.workflow.id)
+
+
+def materialize_node_group_template_to_workflow(
+    session: Session,
+    *,
+    product_id: str,
+    template_key: str,
+    position_x: int,
+    position_y: int,
+) -> AppliedWorkflowTemplateGroup:
     template = get_canvas_template(session, template_key.strip())
     workflow = product_workflow_graph.get_active_workflow(session, product_id)
     if workflow is None:
@@ -271,7 +332,7 @@ def apply_node_group_template_to_workflow(
         position_y=position_y,
         anchor_node=product_context_node,
     )
-    materialize_canvas_template_graph(
+    nodes_by_template_key = materialize_canvas_template_graph(
         session,
         workflow=workflow,
         template=template,
@@ -292,9 +353,10 @@ def apply_node_group_template_to_workflow(
     except ValueError as exc:
         session.rollback()
         raise BusinessValidationError(str(exc)) from exc
-    session.commit()
-    session.expire_all()
-    return product_workflow_graph.get_workflow_or_raise(session, workflow.id)
+    return AppliedWorkflowTemplateGroup(
+        workflow=refreshed,
+        nodes_by_template_key=nodes_by_template_key,
+    )
 
 
 def duplicate_workflow_node_group(
@@ -391,20 +453,14 @@ def update_workflow_node(
     config_json: dict[str, Any] | None,
 ) -> ProductWorkflow:
     node = product_workflow_graph.get_node_or_raise(session, node_id)
-    if title is not None:
-        node.title = title.strip() or product_workflow_graph.default_title_for_type(node.node_type)
+    touched = title is not None or position_x is not None or position_y is not None or config_json is not None
+    apply_workflow_node_patch(node, title=title, config_json=config_json)
     if position_x is not None:
         node.position_x = position_x
     if position_y is not None:
         node.position_y = position_y
-    if config_json is not None:
-        normalized_config = _normalize_node_config(node.node_type, config_json)
-        config_changed = normalized_config != (node.config_json or {})
-        node.config_json = normalized_config
-        if config_changed and node.status == WorkflowNodeStatus.FAILED:
-            node.status = WorkflowNodeStatus.IDLE
-            node.failure_reason = None
-    node.workflow.updated_at = now_utc()
+    if touched:
+        node.workflow.updated_at = now_utc()
     session.commit()
     session.expire_all()
     return product_workflow_graph.get_workflow_or_raise(session, node.workflow_id)

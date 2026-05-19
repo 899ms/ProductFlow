@@ -1,36 +1,4 @@
 import type { WorkflowNode } from "../../lib/types";
-import { NODE_WIDTH } from "./constants";
-import { canvasRectsIntersect } from "./canvasUtils";
-import type { CanvasPoint, CanvasRect } from "./types";
-
-export const SELECTION_NODE_FALLBACK_HEIGHT = 190;
-
-export function getNodeSelectionRect(
-  node: WorkflowNode,
-  position: CanvasPoint,
-  measuredRect?: Pick<DOMRect, "width" | "height"> | null,
-): CanvasRect {
-  return {
-    x: position.x,
-    y: position.y,
-    width: measuredRect?.width && measuredRect.width > 0 ? measuredRect.width : NODE_WIDTH,
-    height:
-      measuredRect?.height && measuredRect.height > 0
-        ? measuredRect.height
-        : SELECTION_NODE_FALLBACK_HEIGHT,
-  };
-}
-
-export function getIntersectingNodeIds(
-  nodes: WorkflowNode[],
-  selectionRect: CanvasRect,
-  getPosition: (node: WorkflowNode) => CanvasPoint,
-  getMeasuredRect: (nodeId: string) => Pick<DOMRect, "width" | "height"> | null,
-): string[] {
-  return nodes
-    .filter((node) => canvasRectsIntersect(selectionRect, getNodeSelectionRect(node, getPosition(node), getMeasuredRect(node.id))))
-    .map((node) => node.id);
-}
 
 export function toggleSelectedNodeId(selectedNodeIds: string[], nodeId: string): string[] {
   if (selectedNodeIds.includes(nodeId)) {

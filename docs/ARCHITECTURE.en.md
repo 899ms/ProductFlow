@@ -213,7 +213,7 @@ Do not bypass the storage service by directly concatenating user-controlled path
 The current security model is "single-admin self-hosted":
 
 - Admin-key login, not public registration.
-- `ADMIN_ACCESS_KEY` is read only from environment variables and does not enter database configuration. The login gate can be disabled through the `admin_access_required` runtime switch, but stays enabled by default.
+- `ADMIN_ACCESS_KEY` is read only from environment variables and does not enter database configuration. The login gate can be disabled through the `admin_access_required` runtime switch and stays enabled by default.
 - The settings page uses an independent `SETTINGS_ACCESS_TOKEN` for secondary unlock; the session stores only the unlocked marker, not the plaintext token. Disabling the login gate does not disable this secondary unlock.
 - Session cookies are signed with `SESSION_SECRET`.
 - CORS is controlled by `BACKEND_CORS_ORIGINS`.

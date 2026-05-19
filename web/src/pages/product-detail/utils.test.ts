@@ -237,7 +237,7 @@ describe("product-detail utils", () => {
       ).toMatchObject({
         disabled: false,
         pending: false,
-        label: status === "failed" ? "重试" : "运行",
+        label: "从此节点运行",
       });
     }
 
@@ -260,7 +260,7 @@ describe("product-detail utils", () => {
     ).toMatchObject({
       disabled: true,
       pending: false,
-      label: "运行",
+      label: "从此节点运行",
     });
 
     expect(
@@ -271,7 +271,7 @@ describe("product-detail utils", () => {
     ).toMatchObject({
       disabled: false,
       pending: false,
-      label: "运行",
+      label: "从此节点运行",
     });
 
     expect(
@@ -280,14 +280,15 @@ describe("product-detail utils", () => {
         idleOptions,
         stubT({
           "detail.retry": "Retry",
-          "detail.runAction.retryTitle": "Run this node again",
+          "detail.runAction.runFromNode": "Run from this node",
+          "detail.runAction.retryTitle": "Run from this node again",
         }),
       ),
     ).toMatchObject({
       disabled: false,
       pending: false,
-      label: "Retry",
-      title: "Run this node again",
+      label: "Run from this node",
+      title: "Run from this node again",
     });
 
     expect(
@@ -309,7 +310,7 @@ describe("product-detail utils", () => {
     ).toMatchObject({
       disabled: false,
       pending: false,
-      label: "运行",
+      label: "从此节点运行",
     });
   });
 

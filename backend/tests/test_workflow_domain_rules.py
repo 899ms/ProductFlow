@@ -6,6 +6,7 @@ from productflow_backend.domain.enums import WorkflowNodeType
 from productflow_backend.domain.workflow_rules import (
     WorkflowRuleEdge,
     WorkflowRuleNode,
+    ready_workflow_node_ids,
     selected_node_execution_plan,
     should_execute_missing_upstream,
     source_asset_ids_from_config,
@@ -103,3 +104,99 @@ def test_topological_node_ids_rejects_cycle_without_database_session() -> None:
 
     with pytest.raises(ValueError, match="工作流不能包含循环依赖"):
         topological_node_ids(nodes, edges)
+
+
+def test_ready_workflow_node_ids_waits_for_chain_upstream() -> None:
+    nodes = [
+        _node("copy", WorkflowNodeType.COPY_GENERATION, x=100),
+        _node("image", WorkflowNodeType.IMAGE_GENERATION, x=200),
+        _node("target", WorkflowNodeType.REFERENCE_IMAGE, x=300),
+    ]
+    edges = [
+        WorkflowRuleEdge("copy", "image"),
+        WorkflowRuleEdge("image", "target"),
+    ]
+
+    ready = ready_workflow_node_ids(
+        nodes=nodes,
+        edges=edges,
+        run_node_ids={"copy", "image", "target"},
+        queued_node_ids={"image", "target"},
+        succeeded_node_ids={"copy"},
+    )
+
+    assert ready == ["image"]
+
+
+def test_ready_workflow_node_ids_returns_branch_wave_after_shared_upstream_succeeds() -> None:
+    nodes = [
+        _node("context", WorkflowNodeType.PRODUCT_CONTEXT, x=0),
+        _node("copy", WorkflowNodeType.COPY_GENERATION, x=100),
+        _node("image", WorkflowNodeType.IMAGE_GENERATION, x=200),
+        _node("reference", WorkflowNodeType.REFERENCE_IMAGE, x=300),
+    ]
+    edges = [
+        WorkflowRuleEdge("context", "copy"),
+        WorkflowRuleEdge("context", "image"),
+        WorkflowRuleEdge("image", "reference"),
+    ]
+
+    ready = ready_workflow_node_ids(
+        nodes=nodes,
+        edges=edges,
+        run_node_ids={"context", "copy", "image", "reference"},
+        queued_node_ids={"copy", "image", "reference"},
+        succeeded_node_ids={"context"},
+    )
+
+    assert ready == ["copy", "image"]
+
+
+def test_ready_workflow_node_ids_waits_for_all_join_upstreams() -> None:
+    nodes = [
+        _node("copy", WorkflowNodeType.COPY_GENERATION, x=100),
+        _node("style", WorkflowNodeType.REFERENCE_IMAGE, x=150),
+        _node("image", WorkflowNodeType.IMAGE_GENERATION, x=200),
+        _node("target", WorkflowNodeType.REFERENCE_IMAGE, x=300),
+    ]
+    edges = [
+        WorkflowRuleEdge("copy", "image"),
+        WorkflowRuleEdge("style", "image"),
+        WorkflowRuleEdge("image", "target"),
+    ]
+
+    partially_ready = ready_workflow_node_ids(
+        nodes=nodes,
+        edges=edges,
+        run_node_ids={"copy", "style", "image", "target"},
+        queued_node_ids={"image", "target"},
+        succeeded_node_ids={"copy"},
+    )
+    fully_ready = ready_workflow_node_ids(
+        nodes=nodes,
+        edges=edges,
+        run_node_ids={"copy", "style", "image", "target"},
+        queued_node_ids={"image", "target"},
+        succeeded_node_ids={"copy", "style"},
+    )
+
+    assert partially_ready == []
+    assert fully_ready == ["image"]
+
+
+def test_ready_workflow_node_ids_does_not_block_on_upstream_outside_selected_run() -> None:
+    nodes = [
+        _node("copy", WorkflowNodeType.COPY_GENERATION, x=100),
+        _node("image", WorkflowNodeType.IMAGE_GENERATION, x=200),
+    ]
+    edges = [WorkflowRuleEdge("copy", "image")]
+
+    ready = ready_workflow_node_ids(
+        nodes=nodes,
+        edges=edges,
+        run_node_ids={"image"},
+        queued_node_ids={"image"},
+        succeeded_node_ids=set(),
+    )
+
+    assert ready == ["image"]

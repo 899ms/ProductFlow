@@ -22,7 +22,6 @@ TEXT_PROVIDER_KINDS = {"mock", "openai"}
 IMAGE_PROVIDER_KINDS = {"mock", "openai_responses", "openai_images", "google_gemini_image"}
 REAL_IMAGE_PROVIDER_KINDS = IMAGE_PROVIDER_KINDS - {"mock"}
 PROVIDER_PURPOSES = {TEXT_PURPOSE, IMAGE_PURPOSE}
-
 CAPABILITY_TEXT_RESPONSES = "text_responses"
 CAPABILITY_IMAGE_RESPONSES = "image_responses"
 CAPABILITY_IMAGE_IMAGES = "image_images"
@@ -294,6 +293,10 @@ def update_provider_binding(
     )
     if provider_kind == "mock":
         provider_profile_id = None
+    normalized_model_settings = _normalize_binding_model_settings(
+        purpose=purpose,
+        model_settings=model_settings,
+    )
     normalized_config = _normalize_binding_config(
         purpose=purpose,
         provider_kind=provider_kind,
@@ -305,14 +308,14 @@ def update_provider_binding(
             purpose=purpose,
             provider_kind=provider_kind,
             provider_profile_id=provider_profile_id,
-            model_settings_json=model_settings,
+            model_settings_json=normalized_model_settings,
             config_json=normalized_config,
         )
         session.add(binding)
     else:
         binding.provider_kind = provider_kind
         binding.provider_profile_id = provider_profile_id
-        binding.model_settings_json = model_settings
+        binding.model_settings_json = normalized_model_settings
         binding.config_json = normalized_config
     if commit:
         session.commit()
@@ -361,6 +364,10 @@ def normalize_provider_binding_runtime_config(
     return _normalize_binding_config(purpose=purpose, provider_kind=provider_kind, config=config)
 
 
+def normalize_provider_binding_model_settings(*, purpose: str, model_settings: dict[str, Any]) -> dict[str, Any]:
+    return _normalize_binding_model_settings(purpose=purpose, model_settings=model_settings)
+
+
 def resolve_text_provider_config() -> ResolvedTextProviderConfig:
     session = get_session_factory()()
     try:
@@ -377,20 +384,22 @@ def resolve_text_provider_config() -> ResolvedTextProviderConfig:
             raise RuntimeError(f"暂不支持的文案 provider: {kind}")
         profile = _require_active_profile(binding)
         _require_capability(profile, CAPABILITY_TEXT_RESPONSES)
+        brief_model = _require_text_value(
+            binding.model_settings_json,
+            "brief_model",
+            "文案商品理解模型未配置",
+            fallback_values=profile.default_models_json,
+        )
+        copy_model = _require_text_value(
+            binding.model_settings_json,
+            "copy_model",
+            "文案生成模型未配置",
+            fallback_values=profile.default_models_json,
+        )
         return ResolvedTextProviderConfig(
             provider_kind="openai",
-            brief_model=_require_text_value(
-                binding.model_settings_json,
-                "brief_model",
-                "文案商品理解模型未配置",
-                fallback_values=profile.default_models_json,
-            ),
-            copy_model=_require_text_value(
-                binding.model_settings_json,
-                "copy_model",
-                "文案生成模型未配置",
-                fallback_values=profile.default_models_json,
-            ),
+            brief_model=brief_model,
+            copy_model=copy_model,
             provider_profile_id=profile.id,
             api_key=profile.api_key,
             base_url=profile.base_url,
@@ -626,8 +635,9 @@ def _validate_binding_runtime_config(
     config: dict[str, Any],
 ) -> None:
     if purpose == TEXT_PURPOSE:
-        _require_text_value(model_settings, "brief_model", "文案商品理解模型未配置", exc_type=ValueError)
-        _require_text_value(model_settings, "copy_model", "文案生成模型未配置", exc_type=ValueError)
+        normalized_settings = _normalize_text_model_settings(model_settings)
+        _require_text_value(normalized_settings, "brief_model", "文案商品理解模型未配置", exc_type=ValueError)
+        _require_text_value(normalized_settings, "copy_model", "文案生成模型未配置", exc_type=ValueError)
         return
     _require_text_value(model_settings, "model", "图片模型未配置", exc_type=ValueError)
     if provider_kind == "openai_responses":
@@ -641,6 +651,22 @@ def _validate_binding_runtime_config(
         gemini_api_version = _optional_str(config.get("gemini_api_version")) or "v1beta"
         if gemini_api_version not in {"v1", "v1beta"}:
             raise ValueError("Gemini API 版本必须是 v1 或 v1beta")
+
+
+def _normalize_binding_model_settings(*, purpose: str, model_settings: dict[str, Any]) -> dict[str, Any]:
+    if purpose == TEXT_PURPOSE:
+        return _normalize_text_model_settings(model_settings)
+    return {key: value for key, value in model_settings.items() if value is not None}
+
+
+def _normalize_text_model_settings(model_settings: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key in ("brief_model", "copy_model"):
+        value = _optional_str(model_settings.get(key))
+        if value is not None:
+            normalized[key] = value
+
+    return normalized
 
 
 def _normalize_binding_config(*, purpose: str, provider_kind: str, config: dict[str, Any]) -> dict[str, Any]:

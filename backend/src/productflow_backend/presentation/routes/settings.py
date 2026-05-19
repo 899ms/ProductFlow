@@ -37,6 +37,7 @@ from productflow_backend.infrastructure.provider_config import (
     is_real_image_provider_kind,
     list_provider_bindings,
     list_provider_profiles,
+    normalize_provider_binding_model_settings,
     normalize_provider_binding_runtime_config,
     update_provider_binding,
     update_provider_profile,
@@ -343,6 +344,10 @@ def _normalize_import_bindings(
             model_settings=binding.model_settings,
             config=binding.config,
         )
+        normalized_model_settings = normalize_provider_binding_model_settings(
+            purpose=binding.purpose,
+            model_settings=binding.model_settings,
+        )
         provider_profile_id = binding.provider_profile_id
         if binding.provider_kind == "mock":
             provider_profile_id = None
@@ -362,7 +367,7 @@ def _normalize_import_bindings(
                 "purpose": binding.purpose,
                 "provider_kind": binding.provider_kind,
                 "provider_profile_id": provider_profile_id,
-                "model_settings_json": dict(binding.model_settings),
+                "model_settings_json": normalized_model_settings,
                 "config_json": normalized_config,
             }
         )

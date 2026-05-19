@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import itsdangerous.timed
 import pytest
 from fastapi.testclient import TestClient
 from helpers import (
@@ -47,6 +48,43 @@ def test_auth_session_required(configured_env: Path) -> None:
     authorized = client.get("/api/products")
     assert authorized.status_code == 200
     assert authorized.json()["items"] == []
+
+
+def test_auth_session_survives_small_wall_clock_rollback(
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.presentation.api import create_app
+
+    current_timestamp = 1_800_000_000
+    monkeypatch.setattr(itsdangerous.timed.time, "time", lambda: current_timestamp)
+    app = create_app()
+    client = TestClient(app)
+
+    _login(client)
+
+    current_timestamp -= 2
+    authorized = client.get("/api/products")
+
+    assert authorized.status_code == 200
+    assert authorized.json()["items"] == []
+
+
+def test_session_signer_does_not_keep_large_future_timestamp_after_clock_recovers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.presentation.session import MonotonicTimestampSigner
+
+    current_timestamp = 1_800_000_000
+    monkeypatch.setattr(itsdangerous.timed.time, "time", lambda: current_timestamp)
+    signer = MonotonicTimestampSigner("super-secret-session-key-123")
+
+    future_signed = signer.sign(b"payload")
+    current_timestamp -= 60
+    recovered_signed = signer.sign(b"payload")
+
+    assert signer.unsign(recovered_signed) == b"payload"
+    assert future_signed != recovered_signed
 
 
 def test_admin_access_can_be_disabled_and_re_enabled(configured_env: Path) -> None:
@@ -696,12 +734,19 @@ def test_provider_config_api_masks_keys_preserves_blank_update_and_validates_bin
         json={
             "provider_kind": "openai",
             "provider_profile_id": profile_id,
-            "model_settings": {"brief_model": "brief-model", "copy_model": "copy-model"},
+            "model_settings": {
+                "brief_model": "brief-model",
+                "copy_model": "copy-model",
+            },
             "config": {},
         },
     )
     assert text_binding.status_code == 200
     assert text_binding.json()["provider_kind"] == "openai"
+    assert text_binding.json()["model_settings"] == {
+        "brief_model": "brief-model",
+        "copy_model": "copy-model",
+    }
 
     image_binding = client.patch(
         "/api/settings/provider-bindings/image",

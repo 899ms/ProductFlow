@@ -104,12 +104,12 @@ The frontend now has ESLint and Vitest scripts, with helper-level tests already 
 - `web/src/lib/imageSizes.test.ts`
 - `web/src/pages/gallery/helpers.test.ts`
 - `web/src/pages/image-chat/branching.test.ts`
-- `web/src/pages/product-detail/canvasUtils.test.ts`
 - `web/src/pages/product-detail/galleryImages.test.ts`
-- `web/src/pages/product-detail/useWorkflowCanvas.test.ts`
+- `web/src/pages/product-detail/reactFlowAdapters.test.ts`
+- `web/src/pages/product-detail/selection.test.ts`
 - `web/src/pages/product-detail/utils.test.ts`
 
-These cover lightweight status merging, canvas helper logic, gallery layout, iterative image branching, image sizing, and other key helper behavior. Component-level interaction tests are still limited.
+These cover lightweight status merging, ReactFlow adapters, selection reconciliation, gallery layout, iterative image branching, image sizing, and other key helper behavior. Component-level interaction tests are still limited.
 
 ### 3.4 Iterative Image Durable Tasks
 

@@ -61,6 +61,21 @@ class CopySlotRequest(BaseModel):
     required: bool = False
     hint: str | None = None
 
+    @field_validator("key", "label")
+    @classmethod
+    def validate_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("文案槽位 key/label 不能为空")
+        return value
+
+    @field_validator("hint")
+    @classmethod
+    def normalize_hint(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
 
 class CopyNodeConfigV2(BaseModel):
     """文案节点 v2 配置。缺省值让旧节点进入同一条 v2 路径。"""

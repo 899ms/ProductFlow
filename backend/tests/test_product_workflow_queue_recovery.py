@@ -8,6 +8,7 @@ import pytest
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from helpers import (
+    _execute_workflow_queue_inline,
     _login,
     _make_demo_image_bytes,
 )
@@ -364,6 +365,54 @@ def test_workflow_run_cancel_marks_active_run_cancelled_and_worker_noops(
     assert run.status == WorkflowRunStatus.CANCELLED
 
 
+def test_workflow_run_execution_fails_when_queued_nodes_have_no_ready_upstream(
+    configured_env: Path,
+    db_session,
+) -> None:
+    from productflow_backend.application.product_workflows import (
+        execute_product_workflow_run,
+        start_product_workflow_run,
+    )
+
+    product = create_product(
+        db_session,
+        name="调度无就绪节点商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="workflow.png",
+        content_type="image/png",
+    )
+    kickoff = start_product_workflow_run(db_session, product_id=product.id)
+    workflow = kickoff.workflow
+    blocking_edge = workflow.edges[0]
+    run = db_session.get(WorkflowRun, kickoff.run_id)
+    assert run is not None
+    for node_run in run.node_runs:
+        if node_run.node_id == blocking_edge.source_node_id:
+            node_run.status = WorkflowNodeStatus.FAILED
+            node_run.failure_reason = "上游测试失败"
+        elif node_run.node_id == blocking_edge.target_node_id:
+            node_run.status = WorkflowNodeStatus.QUEUED
+        else:
+            node_run.status = WorkflowNodeStatus.SUCCEEDED
+    db_session.commit()
+
+    execute_product_workflow_run(kickoff.run_id)
+
+    db_session.expire_all()
+    persisted_run = db_session.get(WorkflowRun, kickoff.run_id)
+    assert persisted_run is not None
+    assert persisted_run.status == WorkflowRunStatus.FAILED
+    assert persisted_run.failure_reason == "上游测试失败"
+    target_node_run = next(
+        node_run for node_run in persisted_run.node_runs if node_run.node_id == blocking_edge.target_node_id
+    )
+    assert target_node_run.status == WorkflowNodeStatus.FAILED
+    assert target_node_run.failure_reason == "上游节点失败"
+
+
 def test_workflow_run_retry_creates_new_run_from_failed_run_without_duplicate_active_run(
     configured_env: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -567,6 +616,7 @@ def test_product_workflow_worker_defers_queued_run_when_global_running_capacity_
     )
     from productflow_backend.application.product_workflows import (
         cancel_product_workflow_run,
+        execute_product_workflow_node_run,
         execute_product_workflow_run,
         start_product_workflow_run,
     )
@@ -602,15 +652,18 @@ def test_product_workflow_worker_defers_queued_run_when_global_running_capacity_
     queued = start_product_workflow_run(db_session, product_id=queued_product.id)
     queued_node_run = db_session.query(WorkflowNodeRun).filter_by(workflow_run_id=queued.run_id).first()
     assert queued_node_run is not None
-    queued_node = db_session.get(WorkflowNode, queued_node_run.node_id)
-    assert queued_node is not None
     db_session.add(AppSetting(key="generation_max_concurrent_tasks", value="1"))
     db_session.commit()
 
     delayed_requeues: list[tuple[str, int]] = []
+    dispatched_node_run_ids: list[str] = []
     monkeypatch.setattr(
-        "productflow_backend.application.product_workflow.run_state.enqueue_workflow_run_later",
-        lambda run_id, *, delay_ms: delayed_requeues.append((run_id, delay_ms)),
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_node_run",
+        lambda node_run_id: dispatched_node_run_ids.append(node_run_id),
+    )
+    monkeypatch.setattr(
+        "productflow_backend.application.product_workflow.run_state.enqueue_workflow_node_run_later",
+        lambda node_run_id, *, delay_ms: delayed_requeues.append((node_run_id, delay_ms)),
     )
     monkeypatch.setattr(
         "productflow_backend.application.product_workflow.execution._execute_node",
@@ -618,33 +671,36 @@ def test_product_workflow_worker_defers_queued_run_when_global_running_capacity_
     )
 
     execute_product_workflow_run(queued.run_id)
+    assert len(dispatched_node_run_ids) == 1
+    dispatched_node_run_id = dispatched_node_run_ids[0]
+    execute_product_workflow_node_run(dispatched_node_run_id)
 
     db_session.expire_all()
     persisted_run = db_session.get(WorkflowRun, queued.run_id)
-    persisted_node_run = db_session.get(WorkflowNodeRun, queued_node_run.id)
-    persisted_node = db_session.get(WorkflowNode, queued_node.id)
+    persisted_node_run = db_session.get(WorkflowNodeRun, dispatched_node_run_id)
+    assert persisted_node_run is not None
+    persisted_node = db_session.get(WorkflowNode, persisted_node_run.node_id)
 
     assert persisted_run is not None
     assert persisted_run.status == WorkflowRunStatus.RUNNING
-    assert persisted_node_run is not None
     assert persisted_node_run.status == WorkflowNodeStatus.QUEUED
     assert persisted_node_run.finished_at is None
     assert persisted_node is not None
     assert persisted_node.status == WorkflowNodeStatus.QUEUED
-    assert delayed_requeues == [(queued.run_id, PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)]
+    assert delayed_requeues == [(dispatched_node_run_id, PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)]
 
     cancel_product_workflow_run(db_session, product_id=queued_product.id, run_id=queued.run_id)
-    execute_product_workflow_run(queued.run_id)
+    execute_product_workflow_node_run(dispatched_node_run_id)
 
     db_session.expire_all()
     cancelled_run = db_session.get(WorkflowRun, queued.run_id)
-    cancelled_node_run = db_session.get(WorkflowNodeRun, queued_node_run.id)
+    cancelled_node_run = db_session.get(WorkflowNodeRun, dispatched_node_run_id)
     assert cancelled_run is not None
     assert cancelled_run.status == WorkflowRunStatus.CANCELLED
     assert cancelled_node_run is not None
     assert cancelled_node_run.status == WorkflowNodeStatus.FAILED
     assert cancelled_node_run.failure_reason == "已取消"
-    assert delayed_requeues == [(queued.run_id, PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)]
+    assert delayed_requeues == [(dispatched_node_run_id, PRODUCT_WORKFLOW_CAPACITY_RETRY_DELAY_MS)]
 
 
 def test_duplicate_workflow_messages_noop_for_terminal_or_running_runs(
@@ -653,6 +709,7 @@ def test_duplicate_workflow_messages_noop_for_terminal_or_running_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from productflow_backend.application.product_workflows import (
+        execute_product_workflow_node_run,
         execute_product_workflow_run,
         start_product_workflow_run,
     )
@@ -700,9 +757,258 @@ def test_duplicate_workflow_messages_noop_for_terminal_or_running_runs(
     running_node_run.started_at = datetime.now(UTC)
     db_session.commit()
 
-    execute_product_workflow_run(running.run_id)
+    execute_product_workflow_node_run(running_node_run.id)
     db_session.refresh(running_node_run)
     assert running_node_run.status == WorkflowNodeStatus.RUNNING
+
+
+def test_workflow_scheduler_dispatches_every_ready_node_run(
+    db_session,
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.application.product_workflows import (
+        execute_product_workflow_run,
+        get_or_create_product_workflow,
+        start_product_workflow_run,
+    )
+
+    product = create_product(
+        db_session,
+        name="ready wave 工作流",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="ready-wave.png",
+        content_type="image/png",
+    )
+    workflow = get_or_create_product_workflow(db_session, product.id)
+    isolated_node = WorkflowNode(
+        workflow_id=workflow.id,
+        node_type=WorkflowNodeType.REFERENCE_IMAGE,
+        title="独立参考",
+        position_x=1200,
+        position_y=120,
+        config_json={"role": "reference", "label": "独立参考"},
+    )
+    db_session.add(isolated_node)
+    db_session.commit()
+    db_session.expire_all()
+
+    kickoff = start_product_workflow_run(db_session, product_id=product.id)
+    dispatched_node_run_ids: list[str] = []
+    monkeypatch.setattr(
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_node_run",
+        lambda node_run_id: dispatched_node_run_ids.append(node_run_id),
+    )
+
+    execute_product_workflow_run(kickoff.run_id)
+
+    run = db_session.get(WorkflowRun, kickoff.run_id)
+    assert run is not None
+    ready_node_ids = {
+        node.id
+        for node in run.workflow.nodes
+        if not any(edge.target_node_id == node.id for edge in run.workflow.edges)
+    }
+    dispatched_node_ids = {
+        node_run.node_id
+        for node_run in run.node_runs
+        if node_run.id in dispatched_node_run_ids
+    }
+    assert dispatched_node_ids == ready_node_ids
+    assert isolated_node.id in dispatched_node_ids
+
+
+def test_workflow_node_run_message_executes_queued_node_once(
+    db_session,
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.application.product_workflows import (
+        execute_product_workflow_node_run,
+        start_product_workflow_run,
+    )
+
+    product = create_product(
+        db_session,
+        name="节点幂等商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="node-idempotency.png",
+        content_type="image/png",
+    )
+    kickoff = start_product_workflow_run(db_session, product_id=product.id)
+    node_run = db_session.query(WorkflowNodeRun).filter_by(workflow_run_id=kickoff.run_id).first()
+    assert node_run is not None
+
+    executed_node_ids: list[str] = []
+
+    def execute_node(*args, node: WorkflowNode, **kwargs) -> dict:
+        executed_node_ids.append(node.id)
+        return {"node_id": node.id}
+
+    monkeypatch.setattr("productflow_backend.application.product_workflow.execution._execute_node", execute_node)
+    monkeypatch.setattr(
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
+        lambda run_id: None,
+    )
+
+    execute_product_workflow_node_run(node_run.id)
+    execute_product_workflow_node_run(node_run.id)
+
+    db_session.expire_all()
+    persisted_node_run = db_session.get(WorkflowNodeRun, node_run.id)
+    assert persisted_node_run is not None
+    assert persisted_node_run.status == WorkflowNodeStatus.SUCCEEDED
+    assert executed_node_ids == [node_run.node_id]
+
+
+def test_workflow_node_run_failure_does_not_block_independent_ready_branch(
+    db_session,
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from productflow_backend.application.product_workflows import (
+        execute_product_workflow_node_run,
+        execute_product_workflow_run,
+        get_or_create_product_workflow,
+        start_product_workflow_run,
+    )
+
+    product = create_product(
+        db_session,
+        name="分支局部失败商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="branch-local-failure.png",
+        content_type="image/png",
+    )
+    workflow = get_or_create_product_workflow(db_session, product.id)
+    failing_node = WorkflowNode(
+        workflow_id=workflow.id,
+        node_type=WorkflowNodeType.REFERENCE_IMAGE,
+        title="会失败的独立参考",
+        position_x=1200,
+        position_y=80,
+        config_json={"role": "reference", "label": "失败参考"},
+    )
+    succeeding_node = WorkflowNode(
+        workflow_id=workflow.id,
+        node_type=WorkflowNodeType.REFERENCE_IMAGE,
+        title="会成功的独立参考",
+        position_x=1200,
+        position_y=240,
+        config_json={"role": "reference", "label": "成功参考"},
+    )
+    db_session.add_all([failing_node, succeeding_node])
+    db_session.commit()
+    db_session.expire_all()
+
+    kickoff = start_product_workflow_run(db_session, product_id=product.id)
+    run = db_session.get(WorkflowRun, kickoff.run_id)
+    assert run is not None
+    isolated_node_ids = {failing_node.id, succeeding_node.id}
+    isolated_node_runs = {
+        node_run.node_id: node_run
+        for node_run in run.node_runs
+        if node_run.node_id in isolated_node_ids
+    }
+    assert set(isolated_node_runs) == isolated_node_ids
+    for node_run in run.node_runs:
+        if node_run.node_id not in isolated_node_ids:
+            node_run.status = WorkflowNodeStatus.SUCCEEDED
+            node_run.finished_at = datetime.now(UTC)
+    db_session.commit()
+
+    def execute_node(*args, node: WorkflowNode, **kwargs) -> dict:
+        if node.id == failing_node.id:
+            raise RuntimeError("独立分支失败")
+        return {"node_id": node.id}
+
+    monkeypatch.setattr("productflow_backend.application.product_workflow.execution._execute_node", execute_node)
+    monkeypatch.setattr(
+        "productflow_backend.application.product_workflow.execution.enqueue_workflow_run",
+        lambda run_id: None,
+    )
+
+    execute_product_workflow_node_run(isolated_node_runs[failing_node.id].id)
+    execute_product_workflow_node_run(isolated_node_runs[succeeding_node.id].id)
+    execute_product_workflow_run(kickoff.run_id)
+
+    db_session.expire_all()
+    persisted_run = db_session.get(WorkflowRun, kickoff.run_id)
+    failed_node_run = db_session.get(WorkflowNodeRun, isolated_node_runs[failing_node.id].id)
+    succeeded_node_run = db_session.get(WorkflowNodeRun, isolated_node_runs[succeeding_node.id].id)
+    assert persisted_run is not None
+    assert persisted_run.status == WorkflowRunStatus.FAILED
+    assert persisted_run.failure_reason == "独立分支失败"
+    assert failed_node_run is not None
+    assert failed_node_run.status == WorkflowNodeStatus.FAILED
+    assert succeeded_node_run is not None
+    assert succeeded_node_run.status == WorkflowNodeStatus.SUCCEEDED
+
+
+def test_workflow_retry_requeues_failed_and_blocked_node_runs_only(
+    db_session,
+    configured_env: Path,
+) -> None:
+    from productflow_backend.application.product_workflows import (
+        retry_product_workflow_run,
+        start_product_workflow_run,
+    )
+
+    product = create_product(
+        db_session,
+        name="局部重试商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="partial-retry.png",
+        content_type="image/png",
+    )
+    kickoff = start_product_workflow_run(db_session, product_id=product.id)
+    workflow = kickoff.workflow
+    edge = workflow.edges[0]
+    run = db_session.get(WorkflowRun, kickoff.run_id)
+    assert run is not None
+    run.status = WorkflowRunStatus.FAILED
+    run.failure_reason = "上游测试失败"
+    run.is_retryable = True
+    run.finished_at = datetime.now(UTC)
+    expected_retry_node_ids = {edge.source_node_id, edge.target_node_id}
+    for node_run in run.node_runs:
+        if node_run.node_id == edge.source_node_id:
+            node_run.status = WorkflowNodeStatus.FAILED
+            node_run.failure_reason = "上游测试失败"
+            node_run.finished_at = datetime.now(UTC)
+        elif node_run.node_id == edge.target_node_id:
+            node_run.status = WorkflowNodeStatus.FAILED
+            node_run.failure_reason = "上游节点失败"
+            node_run.finished_at = datetime.now(UTC)
+        else:
+            node_run.status = WorkflowNodeStatus.SUCCEEDED
+            node_run.finished_at = datetime.now(UTC)
+    db_session.commit()
+
+    sent_run_ids: list[str] = []
+    retried_workflow = retry_product_workflow_run(
+        db_session,
+        product_id=product.id,
+        run_id=kickoff.run_id,
+        enqueue=lambda run_id: sent_run_ids.append(run_id),
+    )
+
+    latest_run = max(retried_workflow.runs, key=lambda item: item.started_at)
+    assert latest_run.id != kickoff.run_id
+    assert sent_run_ids == [latest_run.id]
+    assert {node_run.node_id for node_run in latest_run.node_runs} == expected_retry_node_ids
 
 
 def test_workflow_image_generation_timeout_marks_run_node_and_queue_failed(
@@ -1027,6 +1333,67 @@ def test_workflow_image_generation_policy_reject_is_not_retryable(
     assert unlocked_kickoff.created is True
 
 
+@pytest.mark.parametrize(
+    "malformed_requested_slots",
+    [
+        [123],
+        "主标题",
+        [{"key": "", "label": "主标题"}],
+    ],
+)
+def test_workflow_copy_node_invalid_config_is_non_retryable(
+    db_session,
+    configured_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    malformed_requested_slots: object,
+) -> None:
+    from productflow_backend.application.product_workflows import (
+        execute_product_workflow_run,
+        get_or_create_product_workflow,
+        start_product_workflow_run,
+    )
+
+    _execute_workflow_queue_inline(monkeypatch)
+
+    product = create_product(
+        db_session,
+        name="文案配置错误商品",
+        category=None,
+        price=None,
+        source_note=None,
+        image_bytes=_make_demo_image_bytes(),
+        filename="workflow-copy-invalid-config.png",
+        content_type="image/png",
+    )
+    workflow = get_or_create_product_workflow(db_session, product.id)
+    copy_node = next(node for node in workflow.nodes if node.node_type == WorkflowNodeType.COPY_GENERATION)
+    copy_node.config_json = {
+        **dict(copy_node.config_json or {}),
+        "requested_slots": malformed_requested_slots,
+    }
+    db_session.commit()
+
+    kickoff = start_product_workflow_run(db_session, product_id=product.id)
+    execute_product_workflow_run(kickoff.run_id)
+    db_session.expire_all()
+
+    run = db_session.get(WorkflowRun, kickoff.run_id)
+    failed_copy_node = db_session.get(WorkflowNode, copy_node.id)
+    assert run is not None
+    assert run.status == WorkflowRunStatus.FAILED
+    assert run.failure_reason == "文案节点配置无效，请调整节点设置后重试"
+    assert run.is_retryable is False
+    assert run.progress_metadata == {
+        "last_failure_reason": "文案节点配置无效，请调整节点设置后重试",
+        "last_failure_retryable": False,
+        "retry_hint": "revise_input",
+        "last_failure_category": "invalid_node_config",
+    }
+    assert failed_copy_node is not None
+    assert failed_copy_node.status == WorkflowNodeStatus.FAILED
+    assert failed_copy_node.failure_reason == run.failure_reason
+
+
 def test_workflow_time_limit_exception_marks_running_node_failed(
     db_session,
     configured_env: Path,
@@ -1044,6 +1411,7 @@ def test_workflow_time_limit_exception_marks_running_node_failed(
         raise TimeLimitExceeded()
 
     monkeypatch.setattr("productflow_backend.application.product_workflow.execution._execute_node", raise_time_limit)
+    _execute_workflow_queue_inline(monkeypatch)
 
     product = create_product(
         db_session,

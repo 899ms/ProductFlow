@@ -172,7 +172,7 @@ export function getWorkflowNodeRunActionState(
     return {
       disabled: true,
       pending: pendingThisNode,
-      label: pendingThisNode ? t("detail.runAction.submitting") : t("detail.run"),
+      label: pendingThisNode ? t("detail.runAction.submitting") : t("detail.runAction.runFromNode"),
       title: pendingThisNode ? t("detail.runAction.submittingTitle") : t("detail.runAction.otherSubmittingTitle"),
     };
   }
@@ -187,7 +187,7 @@ export function getWorkflowNodeRunActionState(
   return {
     disabled: false,
     pending: false,
-    label: node.status === "failed" ? t("detail.retry") : t("detail.run"),
+    label: t("detail.runAction.runFromNode"),
     title: node.status === "failed" ? t("detail.runAction.retryTitle") : t("detail.runAction.runTitle"),
   };
 }
