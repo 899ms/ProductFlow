@@ -166,6 +166,7 @@ export function ProductDetailPage() {
   const [mobileCanvasControlsActive, setMobileCanvasControlsActive] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia("(max-width: 1023px)").matches,
   );
+  const [pendingTemplateAutoLayoutSignature, setPendingTemplateAutoLayoutSignature] = useState<string | null>(null);
   const [initialWorkflowCanvasZoom] = useState(() =>
     normalizeWorkflowZoom(readStoredNumber("productflow.workflow.zoom", 1)),
   );
@@ -263,6 +264,7 @@ export function ProductDetailPage() {
 
   useEffect(() => {
     clearWorkflowLocalHistory();
+    setPendingTemplateAutoLayoutSignature(null);
     workflowHistorySignatureRef.current = workflowStructureSignature;
   }, [clearWorkflowLocalHistory, productId, workflow?.id]);
 
@@ -283,6 +285,14 @@ export function ProductDetailPage() {
       workflowHistorySignatureRef.current = workflowStructureSignature;
     }
   }, [clearWorkflowLocalHistory, workflowStructureSignature]);
+
+  useEffect(() => {
+    if (!pendingTemplateAutoLayoutSignature || workflowStructureSignature !== pendingTemplateAutoLayoutSignature) {
+      return;
+    }
+    setPendingTemplateAutoLayoutSignature(null);
+    workflowCanvasRef.current?.triggerAutoLayout();
+  }, [pendingTemplateAutoLayoutSignature, workflowStructureSignature]);
 
   useEffect(() => {
     if (!workflow?.nodes.length) {
@@ -891,6 +901,11 @@ export function ProductDetailPage() {
       setSelectedNodeId(selectedCreatedNode?.id ?? null);
       setSelectedNodeIds(selectedCreatedNode ? [selectedCreatedNode.id] : []);
       setActiveSidebarTab("details");
+      if (createdNodes.length > 0) {
+        const refreshedWorkflow =
+          queryClient.getQueryData<ProductWorkflow>(["product-workflow", productId]) ?? nextWorkflow;
+        setPendingTemplateAutoLayoutSignature(getWorkflowStructureSignature(refreshedWorkflow));
+      }
     },
     onError: (mutationError) => {
       setError(
