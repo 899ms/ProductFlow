@@ -4,6 +4,7 @@ import {
   FileText,
   ImageIcon,
   ImagePlus,
+  Layers3,
   Loader2,
   Maximize2,
   Pencil,
@@ -380,7 +381,7 @@ export function TemplateGraphPreview({
             }}
           >
             <span className="absolute left-[-4px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border border-slate-300 bg-white shadow-sm dark:border-slate-500 dark:bg-[#0b1220]" />
-            <span className="absolute right-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-2 border-indigo-500 bg-white shadow-sm dark:border-violet-400 dark:bg-[#0b1220]" />
+            <span className="absolute right-[-5px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-2 border-indigo-600 bg-white shadow-sm dark:border-violet-400 dark:bg-[#0b1220]" />
             <div className="flex items-start gap-1.5">
               <div className="flex min-w-0 flex-1 gap-1.5">
                 <span className="mt-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 text-slate-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300">
@@ -514,7 +515,7 @@ function CompactTemplateGraphPreview({
               height: `${(COMPACT_PREVIEW_METRICS.nodeHeight / COMPACT_PREVIEW_METRICS.viewBoxHeight) * 100}%`,
             }}
           >
-            <Icon size={13} strokeWidth={2} className="text-indigo-500 dark:text-violet-300" />
+            <Icon size={13} strokeWidth={2} className="text-indigo-600 dark:text-violet-400" />
             <span className="max-w-full truncate px-0.5">{compactPreviewNodeLabel(node.node_type, t)}</span>
           </span>
         );
@@ -586,7 +587,7 @@ function TemplatePreviewDialog({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            className="btn-secondary-spring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
             aria-label={t("detail.preview.close")}
             title={t("detail.preview.close")}
           >
@@ -699,8 +700,9 @@ export function TemplateGroupsPanel({
 
   if (!templates.length) {
     return (
-      <div className="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-6 text-center text-xs text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400">
-        {t("detail.template.empty")}
+      <div className="glass-empty-state flex min-h-[160px] flex-col items-center justify-center gap-2 p-6 text-center text-xs text-zinc-500 dark:text-slate-400">
+        <Layers3 size={18} className="text-indigo-500 opacity-80 dark:text-violet-400" />
+        <div>{t("detail.template.empty")}</div>
       </div>
     );
   }
@@ -712,7 +714,7 @@ export function TemplateGroupsPanel({
 
   return (
     <section className="space-y-3">
-      <div className="flex gap-1 overflow-x-auto border-b border-zinc-100 pb-2 dark:border-slate-700/80">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200/50 pb-2 dark:border-slate-800">
         {TEMPLATE_CATEGORY_ORDER.filter((category) => category.key === "all" || categoryCounts[category.key] > 0).map(
           (category) => {
             const active = activeCategory === category.key;
@@ -729,8 +731,8 @@ export function TemplateGroupsPanel({
                 }}
                 className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                   active
-                    ? "border-zinc-950 bg-zinc-950 text-white dark:border-violet-400/45 dark:bg-violet-500/20 dark:text-violet-100"
-                    : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-slate-700 dark:bg-[#151f33] dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
+                    ? "border-slate-900 bg-slate-900 text-white dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-200"
+                    : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200"
                 }`}
               >
                 {t(category.labelKey)}
@@ -744,8 +746,9 @@ export function TemplateGroupsPanel({
       </div>
 
       {visibleTemplates.length ? null : (
-        <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-6 text-center text-xs text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400">
-          {t("detail.template.emptyCategory")}
+        <div className="glass-empty-state flex min-h-[120px] flex-col items-center justify-center gap-2 p-6 text-center text-xs text-zinc-500 dark:text-slate-400">
+          <Layers3 size={18} className="text-indigo-500 opacity-80 dark:text-violet-400" />
+          <div>{t("detail.template.emptyCategory")}</div>
         </div>
       )}
 
@@ -761,13 +764,13 @@ export function TemplateGroupsPanel({
         return (
           <article
             key={template.key}
-            className="group overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-colors hover:border-zinc-300 dark:border-slate-700/80 dark:bg-[#151f33] dark:shadow-black/20 dark:hover:border-violet-400/45"
+            className="group overflow-hidden rounded-2xl shadow-sm transition-colors config-bubble hover:border-indigo-500/30 dark:hover:border-indigo-500/40"
           >
             <div className="flex items-center gap-2 px-2.5 py-2">
               <button
                 type="button"
                 onClick={() => setExpandedTemplateKey(expanded ? null : template.key)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-50 hover:text-zinc-900 dark:text-slate-400 dark:hover:bg-violet-500/12 dark:hover:text-white"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200"
                 aria-label={expanded ? t("detail.template.collapsePreview") : t("detail.template.expandPreview")}
                 title={expanded ? t("detail.template.collapsePreview") : t("detail.template.expandPreview")}
               >
@@ -796,7 +799,7 @@ export function TemplateGroupsPanel({
                   {externalLabels.map((label) => (
                     <span
                       key={label}
-                      className="max-w-full truncate rounded-sm border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 dark:border-violet-400/35 dark:bg-violet-500/14 dark:text-violet-100"
+                      className="max-w-full truncate rounded-sm border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200"
                     >
                       {label}
                     </span>
@@ -813,7 +816,7 @@ export function TemplateGroupsPanel({
                         setEditingTitle(template.title);
                       }}
                       disabled={userTemplateBusy}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:bg-violet-500/12 dark:hover:text-white"
+                      className="btn-secondary-spring inline-flex h-8 w-8 items-center justify-center rounded-md"
                       aria-label={t("detail.template.rename")}
                       title={t("detail.template.rename")}
                     >
@@ -823,7 +826,7 @@ export function TemplateGroupsPanel({
                       type="button"
                       onClick={() => onArchiveUserTemplate(template)}
                       disabled={userTemplateBusy}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/16"
+                      className="btn-danger-spring inline-flex h-8 w-8 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label={t("detail.template.delete")}
                       title={t("detail.template.delete")}
                     >
@@ -835,7 +838,7 @@ export function TemplateGroupsPanel({
                   type="button"
                   onClick={() => onApplyTemplate(template)}
                   disabled={structureBusy || applyBusy}
-                  className="inline-flex h-8 items-center rounded-md bg-zinc-950 px-2.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400"
+                  className="btn-primary-spring inline-flex h-8 items-center rounded-xl px-3 text-xs font-semibold"
                 >
                   {templateBusy ? (
                     <Loader2 size={13} className="mr-1.5 animate-spin" />
@@ -847,7 +850,7 @@ export function TemplateGroupsPanel({
               </div>
             </div>
             {expanded ? (
-              <div className="border-t border-zinc-100 dark:border-slate-700">
+              <div className="border-t border-zinc-100 dark:border-slate-700 bg-slate-500/5 dark:bg-black/25">
                 <CompactTemplateGraphPreview template={displayTemplate} onOpenPreview={() => setPreviewTemplate(template)} />
               </div>
             ) : null}
@@ -867,20 +870,20 @@ export function TemplateGroupsPanel({
                 <input
                   value={editingTitle}
                   onChange={(event) => setEditingTitle(event.target.value)}
-                  className="h-8 min-w-0 flex-1 rounded-md border border-zinc-200 px-2 text-xs text-zinc-900 outline-none focus:border-indigo-300 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400"
+                  className="h-8 min-w-0 flex-1 px-2 text-xs outline-none input-premium"
                   maxLength={255}
                 />
                 <button
                   type="button"
                   onClick={() => setEditingTemplateKey(null)}
-                  className="h-8 rounded-md px-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+                  className="btn-secondary-spring h-8 rounded-md px-3 text-xs font-medium"
                 >
                   {t("detail.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={userTemplateBusy || !editingTitle.trim()}
-                  className="h-8 rounded-md bg-zinc-950 px-2.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400"
+                  className="btn-primary-spring h-8 rounded-md px-3 text-xs font-medium"
                 >
                   {t("detail.save")}
                 </button>

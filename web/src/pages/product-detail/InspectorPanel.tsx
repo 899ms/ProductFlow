@@ -70,7 +70,7 @@ const SAVE_STATUS_CLASS_NAMES: Record<SaveStatus, string> = {
 };
 
 const ADD_COPY_FIELD_BUTTON_CLASS_NAME =
-  "inline-flex items-center gap-1 rounded-md border border-dashed border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-500 transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-slate-100";
+  "copy-add-field inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold";
 
 const REFERENCE_ROLE_OPTIONS: Array<{ value: string; labelKey: TranslationKey }> = [
   { value: "reference", labelKey: "detail.referenceRole.reference" },
@@ -168,7 +168,7 @@ export function InspectorPanel({
 
   return (
     <div className="space-y-3">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/50 dark:border-slate-700/80 dark:bg-[#151f33] dark:shadow-black/20">
+      <section className="config-bubble rounded-2xl p-4 shadow-sm">
         <div className="flex items-start gap-3">
           <span className="rounded-xl border border-indigo-100 bg-indigo-50 p-2 text-indigo-700 dark:border-violet-400/35 dark:bg-violet-500/15 dark:text-violet-100">
             <InspectorIcon size={16} />
@@ -252,7 +252,7 @@ export function InspectorPanel({
                 type="button"
                 onClick={onRun}
                 disabled={runActionState.disabled}
-                className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400"
+                className="inline-flex items-center justify-center rounded-xl px-3 py-2.5 text-xs font-semibold btn-primary-spring"
                 title={runActionState.title}
               >
                 {runActionState.pending ? (
@@ -268,7 +268,7 @@ export function InspectorPanel({
                 type="button"
                 onClick={onCancelRun}
                 disabled={cancelBusy}
-                className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/16"
+                className="inline-flex items-center justify-center rounded-xl px-3 py-2.5 text-xs font-semibold btn-danger-spring"
                 title={t("detail.inspector.cancelCurrentRun")}
               >
                 {cancelBusy ? (
@@ -284,7 +284,7 @@ export function InspectorPanel({
                 type="button"
                 onClick={onDelete}
                 disabled={busy}
-                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-400/40 dark:bg-[#0b1220] dark:text-red-200 dark:hover:bg-red-500/12"
+                className="inline-flex items-center justify-center rounded-xl px-3 py-2.5 text-xs font-semibold btn-danger-spring"
               >
                 <Trash2 size={13} className="mr-1.5" /> {t("detail.delete")}
               </button>
@@ -293,7 +293,7 @@ export function InspectorPanel({
         ) : null}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/50 dark:border-slate-700/80 dark:bg-[#151f33] dark:shadow-black/20">
+      <section className="config-bubble rounded-2xl p-4 shadow-sm">
         <div className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-slate-300">
           {t("detail.inspector.config")}
         </div>
@@ -306,7 +306,7 @@ export function InspectorPanel({
             onChange={(event) =>
               onDraftChange({ ...draft, title: event.target.value })
             }
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+            className="w-full px-3 py-2.5 text-sm outline-none input-premium"
           />
         </label>
         <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300">
@@ -418,14 +418,14 @@ function ProductContextInspector({
   return (
     <div className="space-y-3">
       <div
-        className={`relative flex h-40 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 p-2 ${IMAGE_PREVIEW_SURFACE_CLASS_NAME}`}
+        className={`group relative flex h-40 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white/50 p-2 shadow-sm transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-violet-400/50 hover:shadow-[0_8px_20px_-6px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_8px_20px_-6px_rgba(139,92,246,0.3)] ${IMAGE_PREVIEW_SURFACE_CLASS_NAME}`}
       >
         {sourceImage ? (
           <>
             <img
               src={sourceImage.previewUrl}
               alt={sourceImage.alt}
-              className="h-full w-full object-contain"
+              className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover:scale-[1.03]"
             />
             <DownloadLink image={sourceImage} variant="overlay" />
           </>
@@ -442,7 +442,7 @@ function ProductContextInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, productName: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+          className="w-full px-3 py-2 text-xs outline-none input-premium"
         />
       </label>
       <div className="grid grid-cols-2 gap-2">
@@ -455,7 +455,7 @@ function ProductContextInspector({
             onChange={(event) =>
               onDraftChange({ ...draft, category: event.target.value })
             }
-            className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+            className="w-full px-3 py-2 text-xs outline-none input-premium"
           />
         </label>
         <label className="block">
@@ -467,7 +467,7 @@ function ProductContextInspector({
             onChange={(event) =>
               onDraftChange({ ...draft, price: event.target.value })
             }
-            className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+            className="w-full px-3 py-2 text-xs outline-none input-premium"
           />
         </label>
       </div>
@@ -508,7 +508,7 @@ function ReferenceImageInspector({
     <div className="space-y-3">
       {image ? (
         <div
-          className={`group relative flex aspect-[4/3] min-h-[180px] w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-200 p-3 transition-colors hover:border-indigo-300 ${IMAGE_PREVIEW_SURFACE_CLASS_NAME}`}
+          className={`group relative flex aspect-[4/3] min-h-[180px] w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white/50 p-3 shadow-sm transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-violet-400/50 hover:shadow-[0_8px_20px_-6px_rgba(99,102,241,0.15)] dark:hover:shadow-[0_8px_20px_-6px_rgba(139,92,246,0.3)] ${IMAGE_PREVIEW_SURFACE_CLASS_NAME}`}
         >
           <button
             type="button"
@@ -516,7 +516,7 @@ function ReferenceImageInspector({
             className="flex h-full w-full items-center justify-center rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
             aria-label={t("detail.inspector.preview", { alt: image.alt })}
           >
-            <img src={image.previewUrl} alt={image.alt} className="h-full w-full object-contain" />
+            <img src={image.previewUrl} alt={image.alt} className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover:scale-[1.03]" />
             <span className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-zinc-950/70 px-2 py-1 text-[11px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
               {t("detail.inspector.clickPreview")}
             </span>
@@ -537,7 +537,7 @@ function ReferenceImageInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, label: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+          className="w-full px-3 py-2 text-xs outline-none input-premium"
         />
       </label>
       <label className="block">
@@ -558,7 +558,9 @@ function ReferenceImageInspector({
       <ImageDropZone
         ariaLabel={hasImage ? t("detail.inspector.replaceReference") : t("detail.inspector.uploadReference")}
         disabled={busy}
-        className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-zinc-300 px-3 py-6 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-violet-400/45 dark:hover:bg-violet-500/12 dark:hover:text-white"
+        className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-slate-300 px-3 py-6 text-xs font-medium text-zinc-600 transition-all duration-300 hover:border-indigo-500 hover:bg-indigo-50/20 hover:text-indigo-600 dark:border-slate-700/80 dark:text-slate-300 dark:hover:border-violet-400 dark:hover:bg-violet-500/5 dark:hover:text-violet-200"
+        activeClassName="border-indigo-500 bg-indigo-50/60 text-indigo-700 shadow-[0_0_0_4px_rgba(99,102,241,0.12)] dark:border-violet-400 dark:bg-violet-500/12 dark:text-violet-100 dark:shadow-[0_0_0_4px_rgba(139,92,246,0.18)]"
+        focusClassName="focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 dark:focus-visible:ring-violet-400 dark:focus-visible:ring-offset-slate-950"
         onFiles={(files) => {
           const file = files[0];
           if (file) {
@@ -567,14 +569,14 @@ function ReferenceImageInspector({
         }}
       >
         {({ isDragging }) => (
-          <>
-            <Upload size={14} className="mr-2" />
+          <div className={`flex h-full w-full items-center justify-center transition-transform duration-200 ${isDragging ? "scale-[1.03] text-indigo-600 dark:text-violet-300" : ""}`}>
+            <Upload size={14} className={`mr-2 transition-transform duration-200 ${isDragging ? "-translate-y-0.5 scale-110" : ""}`} />
             {isDragging
               ? t("detail.inspector.dropUpload")
               : hasImage
                 ? t("detail.inspector.replaceImage")
                 : t("detail.inspector.uploadImage")}
-          </>
+          </div>
         )}
       </ImageDropZone>
     </div>
@@ -612,7 +614,7 @@ function CopyNodeInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, tone: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+          className="w-full px-3 py-2 text-xs outline-none input-premium"
         />
       </label>
       <label className="block">
@@ -624,11 +626,11 @@ function CopyNodeInspector({
           onChange={(event) =>
             onDraftChange({ ...draft, channel: event.target.value })
           }
-          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+          className="w-full px-3 py-2 text-xs outline-none input-premium"
         />
       </label>
       {hasCopy ? (
-        <div className="space-y-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 dark:border-slate-700 dark:bg-[#0b1220]">
+        <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-slate-700 dark:bg-[#0b1220]">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-slate-400">
             {t("detail.inspector.editCopy")}
           </div>
@@ -732,7 +734,7 @@ function StructuredCopyEditor({
 
 function CopyBlockEditor({ block, onChange, t }: { block: CopyBlock; onChange: (block: CopyBlock) => void; t: TFunction }) {
   return (
-    <div className="space-y-2 rounded-md border border-zinc-200 bg-white p-3 dark:border-slate-700 dark:bg-[#151f33]">
+    <div className="copy-editor-card space-y-3 p-3">
       <OptionalTextInput
         label={t("detail.inspector.label")}
         value={block.label ?? ""}
@@ -760,7 +762,7 @@ function CopyBlockEditor({ block, onChange, t }: { block: CopyBlock; onChange: (
 
 function CopySectionEditor({ section, onChange, t }: { section: CopySection; onChange: (section: CopySection) => void; t: TFunction }) {
   return (
-    <div className="space-y-2 rounded-md border border-zinc-200 bg-white p-3 dark:border-slate-700 dark:bg-[#151f33]">
+    <div className="copy-editor-card space-y-3 p-3">
       <OptionalTextInput
         label={t("detail.inspector.sectionTitle")}
         value={section.title ?? ""}
@@ -809,7 +811,7 @@ function CopySectionEditor({ section, onChange, t }: { section: CopySection; onC
 
 function CopySectionItemEditor({ block, onChange, t }: { block: CopyBlock; onChange: (block: CopyBlock) => void; t: TFunction }) {
   return (
-    <div className="space-y-1.5 border-l border-zinc-200 pl-2.5 dark:border-slate-700">
+    <div className="copy-editor-item space-y-2">
       <OptionalTextInput
         label={t("detail.inspector.label")}
         value={block.label ?? ""}
@@ -878,7 +880,7 @@ function OptionalTextInput({
           }
         }}
         placeholder={placeholder}
-        className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+        className="w-full px-3 py-2 text-xs outline-none input-premium"
       />
     </label>
   );

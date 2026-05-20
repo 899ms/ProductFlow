@@ -21,13 +21,13 @@ export function SidebarTabButton({
       aria-pressed={active}
       title={title}
       onClick={onClick}
-      className={`flex w-full flex-col items-center rounded-lg px-1.5 py-2 text-xs font-medium transition-colors ${
+      className={`flex w-full flex-col items-center rounded-xl px-1 py-2 text-[10px] font-medium transition-all transition-spring ${
         active
-          ? "bg-white text-slate-950 shadow-sm dark:border dark:border-violet-400/35 dark:bg-violet-500/18 dark:text-violet-100 dark:shadow-violet-950/20"
-          : "text-slate-400 hover:bg-white/10 hover:text-white dark:text-slate-400 dark:hover:bg-violet-500/12 dark:hover:text-slate-100"
+          ? "bg-white text-indigo-600 shadow-[0_2px_8px_rgba(99,102,241,0.15)] ring-1 ring-indigo-500/30 scale-[1.05] dark:bg-slate-800 dark:text-slate-100 dark:ring-1 dark:ring-indigo-500/50 dark:shadow-[0_4px_12px_rgba(0,0,0,0.3)]"
+          : "text-slate-500 hover:scale-[1.05] hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
       }`}
     >
-      {icon}
+      <span className={`transition-transform duration-300 ${active ? "scale-110" : ""}`}>{icon}</span>
       <span className="mt-1 leading-tight">{label}</span>
     </button>
   );

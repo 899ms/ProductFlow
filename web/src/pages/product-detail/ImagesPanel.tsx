@@ -1,3 +1,4 @@
+import { Image as ImageIcon } from "lucide-react";
 import type { DownloadableImage } from "../../lib/image-downloads";
 import { useI18n } from "../../lib/preferences";
 import type { PosterVariant, ProductDetail, SourceAsset, WorkflowNode } from "../../lib/types";
@@ -38,7 +39,7 @@ export function ImagesPanel({
       <div className="mb-3 space-y-1 text-xs text-zinc-500 dark:text-slate-400">
         <div>{artifactCount ? t("detail.downloadableCount", { count: artifactCount }) : t("detail.waitingAssets")}</div>
         {canFillReference ? (
-          <div className="text-blue-600 dark:text-violet-200">
+          <div className="text-indigo-600 dark:text-violet-400 font-semibold">
             {t("detail.fillInto", { label: selectedReferenceLabel })}
           </div>
         ) : (
@@ -88,8 +89,9 @@ export function ImagesPanel({
           ))}
         </div>
       ) : (
-        <div className="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/60 px-3 py-6 text-center text-xs leading-relaxed text-zinc-500 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-400">
-          {t("detail.noImages")}
+        <div className="glass-empty-state flex min-h-[160px] flex-col items-center justify-center gap-2 p-6 text-center text-xs leading-relaxed text-zinc-500 dark:text-slate-400">
+          <ImageIcon size={18} className="text-indigo-500 opacity-80 dark:text-violet-400" />
+          <div>{t("detail.noImages")}</div>
         </div>
       )}
     </section>

@@ -51,7 +51,7 @@ export function TextArea({
         placeholder={placeholder}
         rows={minRows}
         style={{ minHeight }}
-        className="w-full resize-none rounded-md border border-zinc-200 bg-white px-3 py-2 text-xs leading-relaxed text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-violet-400 dark:focus:ring-violet-400"
+        className="w-full resize-none px-3 py-2 text-xs leading-relaxed outline-none textarea-premium"
       />
     </label>
   );

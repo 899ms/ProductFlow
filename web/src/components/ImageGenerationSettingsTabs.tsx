@@ -43,7 +43,9 @@ export function ImageGenerationSettingsTabs({
           </button>
         ))}
       </div>
-      {value === "basic" ? basic : advanced}
+      <div key={value} className="animate-spring-slide-in">
+        {value === "basic" ? basic : advanced}
+      </div>
     </div>
   );
 }

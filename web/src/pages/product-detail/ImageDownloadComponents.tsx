@@ -54,7 +54,7 @@ export function PosterThumb({
   const image = buildPosterDownload(productName, poster, undefined, t);
   const thumbnailImage = buildPosterDownload(productName, poster, poster.thumbnail_url, t);
   return (
-    <div className="group overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-slate-700/80 dark:bg-[#151f33]">
+    <div className="group overflow-hidden rounded-2xl shadow-sm transition-all hover:scale-[1.01] config-bubble">
       <button
         type="button"
         onClick={() => onPreview?.(image)}
@@ -65,11 +65,11 @@ export function PosterThumb({
           <img
             src={thumbnailImage.previewUrl}
             alt={image.alt}
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+            className="h-full w-full object-cover transition-all duration-300 group-hover:scale-105"
           />
         </div>
       </button>
-      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2 py-1 text-[10px] text-zinc-500 dark:border-slate-700 dark:text-slate-400">
+      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2.5 py-1.5 text-[10px] text-zinc-500 dark:border-slate-800 dark:text-slate-400">
         <span className="min-w-0 truncate">
           {poster.kind === "main_image" ? t("detail.mainImage") : t("detail.promoImage")} ·{" "}
           {formatDateTime(poster.created_at)}
@@ -84,7 +84,7 @@ export function PosterThumb({
                 onUseAsReference();
               }}
               disabled={useAsReferenceDisabled || useAsReferenceBusy}
-              className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/15 dark:text-violet-100 dark:hover:border-violet-300 dark:hover:bg-violet-500/22"
+              className="btn-secondary-spring inline-flex items-center rounded px-2 py-1 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               title={t("detail.fillCurrentNode")}
             >
               {useAsReferenceBusy ? t("detail.filling") : t("detail.fill")}
@@ -128,7 +128,7 @@ export function SourceAssetThumb({
     t,
   );
   return (
-    <div className="group overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-slate-700/80 dark:bg-[#151f33]">
+    <div className="group overflow-hidden rounded-2xl shadow-sm transition-all hover:scale-[1.01] config-bubble">
       <button
         type="button"
         onClick={() => onPreview?.(image)}
@@ -139,11 +139,11 @@ export function SourceAssetThumb({
           <img
             src={thumbnailImage.previewUrl}
             alt={image.alt}
-            className="h-full w-full object-contain transition-transform group-hover:scale-[1.02]"
+            className="h-full w-full object-contain transition-all duration-300 group-hover:scale-105"
           />
         </div>
       </button>
-      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2 py-1 text-[10px] text-zinc-500 dark:border-slate-700 dark:text-slate-400">
+      <div className="flex items-center justify-between gap-2 border-t border-zinc-100 px-2.5 py-1.5 text-[10px] text-zinc-500 dark:border-slate-800 dark:text-slate-400">
         <span className="min-w-0 truncate">
           {t("detail.referenceImage")} · {formatDateTime(asset.created_at)}
         </span>
@@ -157,7 +157,7 @@ export function SourceAssetThumb({
                 onUseAsReference();
               }}
               disabled={useAsReferenceDisabled || useAsReferenceBusy}
-              className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-400/45 dark:bg-violet-500/15 dark:text-violet-100 dark:hover:border-violet-300 dark:hover:bg-violet-500/22"
+              className="btn-secondary-spring inline-flex items-center rounded px-2 py-1 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               title={t("detail.fillCurrentNode")}
             >
               {useAsReferenceBusy ? t("detail.filling") : t("detail.fill")}
@@ -167,8 +167,8 @@ export function SourceAssetThumb({
         </div>
       </div>
       {onUseAsReference ? (
-        <div className="flex items-center border-t border-zinc-100 px-2 py-1.5 text-[10px] leading-4 text-zinc-500 dark:border-slate-700 dark:text-slate-300">
-          <Sparkles size={11} className="mr-1 shrink-0 text-indigo-500 dark:text-violet-300" />
+        <div className="flex items-center border-t border-slate-100 px-2 py-1.5 text-[10px] leading-4 text-zinc-500 dark:border-slate-800 dark:text-slate-300">
+          <Sparkles size={11} className="mr-1 shrink-0 text-indigo-500 dark:text-violet-400" />
           {t("detail.canUseAsReference")}
         </div>
       ) : null}

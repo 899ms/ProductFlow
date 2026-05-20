@@ -79,7 +79,7 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="space-y-3 rounded-xl border border-zinc-200 bg-white px-3 py-3.5 dark:border-slate-700/80 dark:bg-[#151f33]"
+              className="config-bubble space-y-3 rounded-xl p-3"
             >
               <div className="flex items-center gap-2">
                 <div className="h-2.5 w-2.5 rounded-full animate-shimmer" />
@@ -118,7 +118,7 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
             return (
               <div
                 key={run.id}
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-xs shadow-sm dark:border-slate-700/80 dark:bg-[#151f33] dark:shadow-black/20"
+                className="config-bubble rounded-xl p-3 text-xs shadow-sm"
               >
                 <div className="space-y-3">
                   <div className="flex min-w-0 items-start gap-3">

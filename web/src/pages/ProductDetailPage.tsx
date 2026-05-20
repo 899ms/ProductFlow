@@ -8,8 +8,10 @@ import {
   CircleDot,
   Check,
   Eye,
+  FileText,
   Hand,
   Image as ImageIcon,
+  ImagePlus,
   Layers3,
   Loader2,
   Maximize2,
@@ -1769,14 +1771,14 @@ export function ProductDetailPage() {
         type="button"
         onClick={() => void handleRunWorkflow(undefined)}
         disabled={fullWorkflowRunBusy || !workflow}
-        className="flex w-full flex-col items-center rounded-lg bg-indigo-600 px-1.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-primary-spring flex w-full flex-col items-center rounded-lg px-1.5 py-2 text-xs font-semibold"
         title={fullWorkflowRunBusy ? t("detail.workflowRunning") : t("detail.runWorkflow")}
         aria-label={fullWorkflowRunBusy ? t("detail.workflowRunning") : t("detail.runWorkflow")}
       >
         {fullWorkflowRunBusy ? <Loader2 size={17} className="animate-spin" /> : <Play size={17} />}
         <span className="mt-1 leading-tight">{fullWorkflowRunBusy ? t("detail.running") : t("detail.runFullWorkflow")}</span>
       </button>
-      <div className="my-1 h-px w-11 self-center bg-slate-700/80" />
+      <div className="my-1 h-px w-11 self-center bg-slate-200/70 dark:bg-slate-800" />
       <span className="w-full text-center text-[10px] font-semibold leading-none text-slate-500">
         {t("detail.toolbar.addSection")}
       </span>
@@ -1785,7 +1787,7 @@ export function ProductDetailPage() {
 
   const renderToolbarViewDivider = () => (
     <>
-      <div className="my-1 h-px w-11 self-center bg-slate-700/80" />
+      <div className="my-1 h-px w-11 self-center bg-slate-200/70 dark:bg-slate-800" />
       <span className="w-full text-center text-[10px] font-semibold leading-none text-slate-500">
         {t("detail.toolbar.viewSection")}
       </span>
@@ -1803,14 +1805,19 @@ export function ProductDetailPage() {
               ? t("detail.singleNode.description.copyGeneration")
               : t("detail.singleNode.description.imageGeneration");
         const creatingThisNode = createNodeMutation.isPending && createNodeMutation.variables === option.type;
+        const NodeIcon = option.type === "reference_image"
+          ? ImagePlus
+          : option.type === "copy_generation"
+            ? FileText
+            : ImageIcon;
         return (
           <div
             key={option.type}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-3 dark:border-slate-700/80 dark:bg-slate-900/70"
+            className="config-bubble rounded-2xl p-4 shadow-sm transition-all hover:scale-[1.01]"
           >
             <div className="flex items-start">
-              <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-violet-500/14 dark:text-violet-200">
-                <Plus size={16} />
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-violet-400">
+                <NodeIcon size={16} />
               </span>
               <span className="ml-3 min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-zinc-900 dark:text-slate-100">{optionLabel}</span>
@@ -1819,12 +1826,12 @@ export function ProductDetailPage() {
                 </span>
               </span>
             </div>
-            <div className="mt-3 flex justify-end">
+            <div className="mt-4 flex justify-end">
               <button
                 type="button"
                 onClick={() => createNodeMutation.mutate(option.type)}
                 disabled={structureBusy || !workflow}
-                className="inline-flex h-11 items-center rounded-md bg-zinc-950 px-3 text-xs font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400 lg:h-8 lg:px-2.5"
+                className="btn-primary-spring inline-flex h-9 items-center rounded-xl px-4 text-xs font-semibold"
                 title={t("detail.addNode", { label: optionLabel })}
                 aria-label={t("detail.addNode", { label: optionLabel })}
               >
@@ -1919,8 +1926,9 @@ export function ProductDetailPage() {
         })}
       />
     ) : (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 px-4 py-5 text-sm text-zinc-500 dark:border-slate-700 dark:bg-slate-950/45 dark:text-slate-400">
-        {t("detail.selectNodeHint")}
+      <div className="glass-empty-state px-4 py-8 text-center text-xs text-zinc-500 dark:text-slate-400 flex flex-col items-center justify-center gap-2">
+        <MousePointer2 size={18} className="text-indigo-500 opacity-70 dark:text-indigo-400" />
+        <div>{t("detail.selectNodeHint")}</div>
       </div>
     );
 
@@ -2018,7 +2026,12 @@ export function ProductDetailPage() {
 
         <div className="relative flex min-h-0 flex-1 overflow-hidden bg-slate-50 dark:bg-[#0b1220]">
           <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-transparent to-indigo-50/40 dark:from-[#060a12]/78 dark:via-transparent dark:to-[#151f33]/70" />
-          <section className="relative z-10 min-w-0 flex-1 overflow-hidden">
+          <section
+            className="relative z-10 min-w-0 flex-1 overflow-hidden transition-[padding] duration-300 ease-out"
+            style={{
+              paddingRight: mobileCanvasControlsActive ? 0 : (sidebarCollapsed ? 96 : 72 + inspectorWidth + 24),
+            }}
+          >
             <div data-canvas-control className="pointer-events-none absolute right-3 top-3 z-30 lg:right-4 lg:top-4">
               <button
                 type="button"
@@ -2134,21 +2147,9 @@ export function ProductDetailPage() {
           </section>
 
           {sidebarCollapsed ? (
-            <>
-            <div data-canvas-control className="group/sidebar-expand absolute right-0 top-0 z-30 hidden h-full w-8 items-center justify-center lg:flex">
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(false)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-500 opacity-0 shadow-sm transition-opacity hover:text-zinc-900 focus:opacity-100 focus:outline-none group-hover/sidebar-expand:opacity-100 dark:border-slate-700/80 dark:bg-[#151f33]/95 dark:text-slate-300 dark:hover:text-white"
-                aria-label={t("detail.expandSidebar")}
-                title={t("detail.expandSidebar")}
-              >
-                <ChevronLeft size={14} />
-              </button>
-            </div>
             <div
               data-canvas-control
-              className="absolute right-4 top-16 z-30 hidden w-[72px] flex-col items-center gap-2 rounded-2xl border border-slate-700/80 bg-[#0f1726]/95 p-2 shadow-xl shadow-slate-950/25 backdrop-blur lg:flex"
+              className="absolute right-6 top-20 z-30 hidden w-[72px] flex-col items-center gap-2 rounded-[24px] shadow-2xl glass-inspector p-2 pb-3 lg:flex"
             >
               {renderWorkflowToolbarButtons()}
               <SidebarTabButton active={false} label={t("detail.tabSingleNode")} title={t("detail.tabSingleNode")} icon={<Plus size={17} />} onClick={() => openSidebarTab("singleNode")} />
@@ -2157,22 +2158,35 @@ export function ProductDetailPage() {
               <SidebarTabButton active={false} label={t("detail.tabDetails")} title={t("detail.tabDetails")} icon={<Eye size={17} />} onClick={() => openSidebarTab("details")} />
               <SidebarTabButton active={false} label={t("detail.tabRuns")} title={t("detail.runsTitle")} icon={<CircleDot size={17} />} onClick={() => openSidebarTab("runs")} />
               <SidebarTabButton active={false} label={t("detail.tabImages")} title={t("detail.tabImages")} icon={<ImageIcon size={17} />} onClick={() => openSidebarTab("images")} />
+
+              <div className="mt-auto flex w-full justify-center border-t border-slate-200/40 pt-2 dark:border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 transition-all hover:scale-105 hover:bg-white/40 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-200"
+                  title={t("detail.expandSidebar")}
+                  aria-label={t("detail.expandSidebar")}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+              </div>
             </div>
-            </>
           ) : (
-          <div className="relative z-20 hidden shrink-0 border-l border-slate-200 bg-white/95 shadow-[-8px_0_24px_-20px_rgba(15,23,42,0.35)] backdrop-blur dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[-16px_0_42px_rgba(0,0,0,0.28)] lg:flex">
-            <div data-canvas-control className="group/sidebar-collapse absolute left-[-28px] top-0 z-30 flex h-full w-7 items-center justify-center">
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(true)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-500 opacity-0 shadow-sm transition-opacity hover:text-zinc-900 focus:opacity-100 focus:outline-none group-hover/sidebar-collapse:opacity-100 dark:border-slate-700/80 dark:bg-[#151f33]/95 dark:text-slate-300 dark:hover:text-white"
-                aria-label={t("detail.collapseSidebar")}
-                title={t("detail.collapseSidebar")}
-              >
-                <ChevronRight size={14} />
-              </button>
+          <div
+            data-canvas-control
+            className="absolute right-6 top-20 bottom-6 z-30 hidden rounded-[28px] shadow-[0_24px_50px_rgba(15,23,42,0.18)] dark:shadow-[0_32px_64px_rgba(0,0,0,0.45)] glass-inspector lg:flex animate-spring-slide-in"
+            style={{ width: 72 + inspectorWidth }}
+            >
+            <div
+              role="separator"
+              aria-label={t("detail.resizeSidebar")}
+              onPointerDown={startInspectorResize}
+              className="group absolute left-0 top-0 z-30 flex h-full w-2.5 cursor-col-resize items-center justify-center"
+            >
+              <div className="h-12 w-[4px] rounded-full bg-slate-300 opacity-40 transition-all duration-300 group-hover:h-20 group-hover:opacity-100 dark:bg-slate-700 animate-handle-glow" />
             </div>
-            <div data-canvas-control className="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-slate-800 bg-slate-950 px-2 py-3 dark:border-slate-700/80 dark:bg-[#0b1220]">
+
+            <div className="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-slate-200/40 bg-white/5 px-2 py-4 dark:border-white/5 dark:bg-black/10">
               {renderWorkflowToolbarButtons()}
               <SidebarTabButton
                 active={activeSidebarTab === "singleNode"}
@@ -2210,23 +2224,30 @@ export function ProductDetailPage() {
                 icon={<ImageIcon size={17} />}
                 onClick={() => openSidebarTab("images")}
               />
+
+              <div className="mt-auto flex w-full justify-center border-t border-slate-200/40 pt-2 dark:border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(true)}
+                  className="btn-secondary-spring inline-flex h-9 w-9 items-center justify-center rounded-xl"
+                  title={t("detail.collapseSidebar")}
+                  aria-label={t("detail.collapseSidebar")}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
+
             <aside
-              className="relative flex shrink-0 flex-col bg-white/95 dark:bg-[#111a2b]"
+              className="relative flex shrink-0 flex-col bg-transparent"
               style={{ width: inspectorWidth }}
             >
-              <div
-                role="separator"
-                aria-label={t("detail.resizeSidebar")}
-                onPointerDown={startInspectorResize}
-                className="absolute left-[-4px] top-0 h-full w-2 cursor-col-resize hover:bg-zinc-300/50 dark:hover:bg-violet-400/20"
-              />
-              <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-slate-700/80">
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200/50 px-4 dark:border-slate-800">
                 <div className="flex items-center">
-                <span className="mr-2 text-zinc-400 dark:text-slate-400">{activeSidebarTabItem.icon}</span>
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-slate-300">
-                  {activeSidebarTabItem.label}
-                </span>
+                  <span className="mr-2 text-indigo-600 dark:text-violet-400">{activeSidebarTabItem.icon}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-700 dark:text-slate-200">
+                    {activeSidebarTabItem.label}
+                  </span>
                 </div>
               </div>
               <div
