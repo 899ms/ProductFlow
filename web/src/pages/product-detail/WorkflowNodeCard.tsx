@@ -69,9 +69,15 @@ export function WorkflowNodeCard({
     <div
       ref={nodeRef}
       data-workflow-node-id={node.id}
-      className={`nopan relative w-[248px] touch-none select-none rounded-2xl border bg-white/95 p-3 text-left shadow-sm backdrop-blur dark:bg-[#1c2940]/96 dark:shadow-[0_18px_42px_rgba(0,0,0,0.34)] ${
-        dragging ? "cursor-grabbing" : "transition-[border-color,box-shadow] hover:shadow-md dark:hover:border-slate-400/85 dark:hover:shadow-[0_20px_46px_rgba(0,0,0,0.42)]"
-      } ${selectedClassName}`}
+      className={`nopan relative w-[248px] touch-none select-none rounded-2xl border bg-white/95 p-3 text-left shadow-sm backdrop-blur dark:bg-[#1c2940]/96 dark:shadow-[0_18px_42px_rgba(0,0,0,0.34)] transition-[border-color,box-shadow,transform] transition-spring animate-spring-node-in ${
+        dragging ? "cursor-grabbing" : "hover:-translate-y-0.5 hover:shadow-md dark:hover:border-slate-400/85 dark:hover:shadow-[0_20px_46px_rgba(0,0,0,0.42)]"
+      } ${selectedClassName} ${
+        node.status === "running"
+          ? "animate-running-glow"
+          : node.status === "queued"
+            ? "animate-queued-glow"
+            : ""
+      }`}
     >
       {primarySelected || secondarySelected || previewSelected ? (
         <div
@@ -124,9 +130,22 @@ export function WorkflowNodeCard({
             ) : null}
           </div>
         ) : imageWaiting ? (
-          <div className="mb-2 flex h-28 flex-col items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-700 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:text-indigo-100">
-            <Loader2 size={18} className="animate-spin" />
-            <div className="mt-2 text-xs font-medium">{waitingLabel}</div>
+          <div className="relative mb-2 flex h-28 flex-col items-center justify-center overflow-hidden rounded-xl border border-indigo-200/50 bg-indigo-950/10 text-indigo-700 dark:border-indigo-400/20 dark:bg-slate-950/30 dark:text-indigo-100 shadow-inner">
+            <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-xl">
+              <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/5 via-indigo-900/10 to-purple-950/15 dark:from-slate-950/10 dark:to-slate-900/20" />
+              <div className="absolute left-[35%] bottom-0 w-3 h-3 rounded-full bg-indigo-400/60 blur-[2px] animate-particle-1" />
+              <div className="absolute left-[50%] bottom-0 w-2.5 h-2.5 rounded-full bg-purple-400/50 blur-[1px] animate-particle-2" />
+              <div className="absolute left-[42%] bottom-0 w-4 h-4 rounded-full bg-violet-400/40 blur-[3px] animate-particle-3" />
+              <div className="absolute left-[58%] bottom-0 w-2 h-2 rounded-full bg-pink-400/60 blur-[1px] animate-particle-4" />
+              <div className="absolute left-[38%] bottom-0 w-3.5 h-3.5 rounded-full bg-indigo-300/50 blur-[2px] animate-particle-5" />
+              <div className="absolute left-[48%] bottom-0 w-3 h-3 rounded-full bg-purple-300/60 blur-[2px] animate-particle-6" />
+            </div>
+            <div className="relative z-10 flex flex-col items-center justify-center">
+              <Loader2 size={18} className="animate-spin text-indigo-500 dark:text-indigo-300 opacity-80" />
+              <div className="mt-2 text-xs font-semibold tracking-wide text-indigo-900 dark:text-indigo-200 bg-white/40 px-2 py-0.5 rounded-md backdrop-blur-sm shadow-sm dark:bg-slate-900/40">
+                {waitingLabel}
+              </div>
+            </div>
           </div>
         ) : null}
         {activityText && !imageWaiting ? (

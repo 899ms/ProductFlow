@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Image as ImageIcon,
-  Loader2,
   MoreHorizontal,
   Plus,
   Trash2,
@@ -166,8 +165,64 @@ export function ProductListPage() {
           ) : null}
 
           {productsQuery.isLoading ? (
-            <div className="flex justify-center rounded-xl border border-zinc-200 bg-white py-20 text-zinc-400 dark:border-slate-700/80 dark:bg-[#111b2d] dark:text-slate-500">
-              <Loader2 size={20} className="animate-spin" />
+            <div className="space-y-4">
+              <div className="space-y-3 lg:hidden">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/85 dark:bg-[#0f1726]"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 shrink-0 rounded-lg animate-shimmer" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-2/3 animate-shimmer" />
+                        <div className="h-3.5 w-1/2 animate-shimmer" />
+                      </div>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-100 pt-3 dark:border-slate-800">
+                      <div className="h-5 w-20 rounded-full animate-shimmer" />
+                      <div className="h-4 w-24 animate-shimmer" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50 dark:border-slate-700/80 dark:bg-[#0f1726] dark:shadow-[0_18px_60px_rgba(0,0,0,0.24)] lg:block">
+                <table className="w-full table-fixed border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/70 dark:border-slate-700/80 dark:bg-[#151f33]">
+                      <th className="w-[45%] px-5 py-3 font-medium text-zinc-500 dark:text-slate-300">{t("products.table.product")}</th>
+                      <th className="w-[18%] px-5 py-3 font-medium text-zinc-500 dark:text-slate-300">{t("products.table.state")}</th>
+                      <th className="w-[18%] px-5 py-3 font-medium text-zinc-500 dark:text-slate-300">{t("products.table.updated")}</th>
+                      <th className="w-[19%] px-5 py-3 text-right font-medium text-zinc-500 dark:text-slate-300">{t("products.table.actions")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-slate-800">
+                    {[1, 2, 3, 4].map((i) => (
+                      <tr key={i}>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 shrink-0 rounded-lg animate-shimmer" />
+                            <div className="flex-1 space-y-2">
+                              <div className="h-4 w-1/3 animate-shimmer" />
+                              <div className="h-3.5 w-1/2 animate-shimmer" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="h-6 w-20 rounded-full animate-shimmer" />
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="h-4 w-24 animate-shimmer" />
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="ml-auto h-5 w-24 animate-shimmer" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : productsQuery.isError ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/35 dark:bg-red-500/10 dark:text-red-200">

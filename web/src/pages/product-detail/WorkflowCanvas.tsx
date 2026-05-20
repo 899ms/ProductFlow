@@ -35,7 +35,7 @@ import type {
   Viewport,
   XYPosition,
 } from "@xyflow/react";
-import { CopyPlus, Focus, Loader2, Play, Save, Trash2 } from "lucide-react";
+import { CopyPlus, Focus, Grid, Loader2, Play, Save, Sparkles, Trash2 } from "lucide-react";
 
 import type { DownloadableImage } from "../../lib/image-downloads";
 import type { ProductWorkflow, WorkflowNode } from "../../lib/types";
@@ -81,6 +81,7 @@ export interface WorkflowCanvasHandle {
   getViewportCenterNodePosition: () => CanvasPoint;
   centerNode: (node: WorkflowNode) => void;
   fitNodeIds: (nodeIds: string[]) => void;
+  triggerAutoLayout: () => void;
 }
 
 interface WorkflowCanvasNodeData extends ProductFlowNodeData {
@@ -134,6 +135,11 @@ interface WorkflowCanvasProps {
   fitSelectionLabel: string;
   canvasControlsLabel: string;
   canvasMiniMapLabel: string;
+  snapToGridLabel: string;
+  autoLayoutLabel: string;
+  snapToGrid: boolean;
+  onToggleSnapToGrid: () => void;
+  onAutoLayout: () => void;
   onBlankClick: (event: ReactMouseEvent<Element>) => void;
   onSelectNode: (nodeId: string, event: ReactMouseEvent<HTMLElement>) => void;
   onNodeDragCompleteSelect: (nodeId: string) => void;
@@ -363,6 +369,7 @@ function ProductFlowCanvasEdge({
   targetY,
   sourcePosition,
   targetPosition,
+  selected,
   data,
 }: EdgeProps<WorkflowCanvasEdge>) {
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -374,14 +381,45 @@ function ProductFlowCanvasEdge({
     targetPosition,
   });
 
+  const [isHovered, setIsHovered] = useState(false);
+
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={{ stroke: "#94a3b8", strokeWidth: 1.7 }} />
-      <EdgeToolbar edgeId={id} x={labelX} y={labelY} isVisible className="nodrag nowheel nopan">
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        style={{
+          stroke: selected ? "#4f46e5" : isHovered ? "#64748b" : "#94a3b8",
+          strokeWidth: selected ? 2.2 : 1.7,
+          transition: "stroke 0.15s ease, stroke-width 0.15s ease",
+        }}
+      />
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={15}
+        className="cursor-pointer"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+      <EdgeToolbar
+        edgeId={id}
+        x={labelX}
+        y={labelY}
+        isVisible
+        className={`nodrag nowheel nopan transition-all duration-200 ${
+          isHovered || selected
+            ? "scale-100 opacity-100 pointer-events-auto"
+            : "scale-75 opacity-0 pointer-events-none"
+        }`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
         <button
           type="button"
           data-node-action
-          className="nodrag nowheel nopan flex h-5 w-5 items-center justify-center rounded-full border border-zinc-300 bg-white text-[12px] leading-none text-zinc-500 shadow-sm hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:border-slate-600 dark:bg-[#0f1726] dark:text-slate-300 dark:hover:border-red-400/60 dark:hover:bg-red-500/10 dark:hover:text-red-200"
+          className="nodrag nowheel nopan flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-500 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:border-slate-800 dark:bg-[#0f1726]/95 dark:text-slate-400 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-200"
           onClick={(event) => {
             event.stopPropagation();
             data?.onDeleteEdge(id);
@@ -390,7 +428,7 @@ function ProductFlowCanvasEdge({
           title={data?.deleteLabel}
           aria-label={data?.deleteLabel}
         >
-          ×
+          <Trash2 size={12} strokeWidth={2.2} />
         </button>
       </EdgeToolbar>
     </>
@@ -499,6 +537,11 @@ interface WorkflowCanvasControlsPanelProps {
   canvasControlsLabel: string;
   selectedNodeIds: string[];
   onViewportCommit: (viewport: Viewport) => void;
+  snapToGrid: boolean;
+  onToggleSnapToGrid: () => void;
+  onAutoLayout: () => void;
+  snapToGridLabel: string;
+  autoLayoutLabel: string;
 }
 
 function WorkflowCanvasControlsPanel({
@@ -507,6 +550,11 @@ function WorkflowCanvasControlsPanel({
   canvasControlsLabel,
   selectedNodeIds,
   onViewportCommit,
+  snapToGrid,
+  onToggleSnapToGrid,
+  onAutoLayout,
+  snapToGridLabel,
+  autoLayoutLabel,
 }: WorkflowCanvasControlsPanelProps) {
   const { zoom } = useViewport();
   const reactFlow = useReactFlow<WorkflowCanvasNode, WorkflowCanvasEdge>();
@@ -567,6 +615,21 @@ function WorkflowCanvasControlsPanel({
       >
         <Focus aria-hidden="true" size={13} />
       </ControlButton>
+      <ControlButton
+        onClick={onToggleSnapToGrid}
+        aria-label={snapToGridLabel}
+        title={snapToGridLabel}
+        className={snapToGrid ? "!bg-indigo-50 dark:!bg-violet-500/20" : ""}
+      >
+        <Grid aria-hidden="true" size={13} className={snapToGrid ? "text-indigo-600 dark:text-violet-400" : ""} />
+      </ControlButton>
+      <ControlButton
+        onClick={onAutoLayout}
+        aria-label={autoLayoutLabel}
+        title={autoLayoutLabel}
+      >
+        <Sparkles aria-hidden="true" size={13} />
+      </ControlButton>
     </Controls>
   );
 }
@@ -608,6 +671,11 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
     fitSelectionLabel,
     canvasControlsLabel,
     canvasMiniMapLabel,
+    snapToGridLabel,
+    autoLayoutLabel,
+    snapToGrid,
+    onToggleSnapToGrid,
+    onAutoLayout,
     onBlankClick,
     onSelectNode,
     onNodeDragCompleteSelect,
@@ -703,8 +771,162 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
         });
       },
       fitNodeIds,
+      triggerAutoLayout: () => {
+        if (!workflow || !workflow.nodes.length) {
+          return;
+        }
+        const inDegree: Record<string, number> = {};
+        const adj: Record<string, string[]> = {};
+        const nodes = workflow.nodes;
+        const edges = workflow.edges;
+
+        for (const node of nodes) {
+          inDegree[node.id] = 0;
+          adj[node.id] = [];
+        }
+        for (const edge of edges) {
+          if (adj[edge.source_node_id]) {
+            adj[edge.source_node_id].push(edge.target_node_id);
+          }
+          inDegree[edge.target_node_id] = (inDegree[edge.target_node_id] || 0) + 1;
+        }
+
+        const depth: Record<string, number> = {};
+        const queue: string[] = [];
+
+        for (const node of nodes) {
+          if (inDegree[node.id] === 0) {
+            depth[node.id] = 0;
+            queue.push(node.id);
+          } else {
+            depth[node.id] = 0;
+          }
+        }
+
+        while (queue.length > 0) {
+          const u = queue.shift()!;
+          const uDepth = depth[u];
+          for (const v of adj[u]) {
+            depth[v] = Math.max(depth[v] || 0, uDepth + 1);
+            queue.push(v);
+          }
+        }
+
+        const layers: Record<number, typeof nodes> = {};
+        for (const node of nodes) {
+          const d = depth[node.id] || 0;
+          if (!layers[d]) {
+            layers[d] = [];
+          }
+          layers[d].push(node);
+        }
+
+        for (const d of Object.keys(layers)) {
+          layers[Number(d)].sort((a, b) => a.position_y - b.position_y);
+        }
+
+        const getNodeHeight = (node: typeof nodes[number]): number => {
+          const element = document.querySelector(`[data-workflow-node-id="${node.id}"]`);
+          if (element) {
+            const rect = element.getBoundingClientRect();
+            if (rect.height > 0) {
+              return rect.height;
+            }
+          }
+          let estimatedHeight = 116;
+          const isImageNode = node.node_type === "reference_image" || node.node_type === "image_generation";
+          const hasImage = isImageNode && (node.status === "succeeded" || node.status === "failed");
+          const imageWaiting = isImageNode && node.status === "queued";
+          if (hasImage || imageWaiting) {
+            estimatedHeight += 120;
+          }
+          if (node.status === "queued") {
+            estimatedHeight += 44;
+          }
+          if (node.failure_reason) {
+            estimatedHeight += 60;
+          }
+          return estimatedHeight;
+        };
+
+        const startX = 72;
+        const centerY = 216;
+        const gapX = 360;
+        const itemSpacingY = 72;
+
+        const committed: Array<{ nodeId: string; position: CanvasPoint }> = [];
+        const moveGroupId = `auto-layout-${Date.now()}`;
+
+        const calculatedPositions: Record<string, { x: number; y: number }> = {};
+
+        for (const dStr of Object.keys(layers)) {
+          const d = Number(dStr);
+          const layerNodes = layers[d];
+          if (!layerNodes.length) {
+            continue;
+          }
+
+          const heights = layerNodes.map(node => getNodeHeight(node));
+          const totalHeights = heights.reduce((sum, h) => sum + h, 0);
+          const totalSpacing = (layerNodes.length - 1) * itemSpacingY;
+          const totalLayerHeight = totalHeights + totalSpacing;
+
+          let currentY = centerY - totalLayerHeight / 2;
+
+          for (let i = 0; i < layerNodes.length; i++) {
+            const node = layerNodes[i];
+            const nodeHeight = heights[i];
+            const newX = Math.round((startX + d * gapX) / 36) * 36;
+            const newY = Math.round(currentY / 36) * 36;
+
+            calculatedPositions[node.id] = { x: newX, y: newY };
+            currentY = newY + nodeHeight + itemSpacingY;
+          }
+        }
+
+        const changedCandidates = nodes.map(node => {
+          const pos = calculatedPositions[node.id];
+          if (!pos) {
+            return null;
+          }
+          if (node.position_x !== pos.x || node.position_y !== pos.y) {
+            return { node, newX: pos.x, newY: pos.y };
+          }
+          return null;
+        }).filter((item): item is { node: typeof nodes[number]; newX: number; newY: number } => item !== null);
+
+        if (changedCandidates.length === 0) {
+          return;
+        }
+
+        changedCandidates.forEach(({ node, newX, newY }) => {
+          const mutationVersion = (nodePositionMutationVersionsRef.current[node.id] ?? 0) + 1;
+          nodePositionMutationVersionsRef.current[node.id] = mutationVersion;
+
+          onNodePositionCommit({
+            node,
+            position_x: newX,
+            position_y: newY,
+            mutationVersion,
+            moveGroupId,
+            moveGroupSize: changedCandidates.length,
+          });
+
+          committed.push({
+            nodeId: node.id,
+            position: { x: newX, y: newY },
+          });
+        });
+
+        if (committed.length) {
+          setOptimisticNodePositions((current) => ({
+            ...current,
+            ...Object.fromEntries(committed.map((entry) => [entry.nodeId, entry.position])),
+          }));
+        }
+      },
     }),
-    [fitNodeIds],
+    [fitNodeIds, onNodePositionCommit, workflow],
   );
 
   const canDragNodes = !structureBusy && (!mobileCanvasControlsActive || mobileInteractionMode === "edit");
@@ -898,7 +1120,17 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
         .map((nodeId) => {
           const workflowNode = workflowNodeMap.get(nodeId);
           const flowNode = draggedNodeMap.get(nodeId) ?? flowInstanceRef.current?.getNode(nodeId);
-          return workflowNode && flowNode ? { workflowNode, position: flowNode.position } : null;
+          if (workflowNode && flowNode) {
+            let position = flowNode.position;
+            if (snapToGrid) {
+              position = {
+                x: Math.round(position.x / 36) * 36,
+                y: Math.round(position.y / 36) * 36,
+              };
+            }
+            return { workflowNode, position };
+          }
+          return null;
         })
         .filter((candidate): candidate is { workflowNode: WorkflowNode; position: XYPosition } => Boolean(candidate));
 
@@ -948,6 +1180,7 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
       completeActiveNodeDragSession,
       nodeClickCommitDistance,
       restoreNodeDragStartPositions,
+      snapToGrid,
       workflow,
     ],
   );
@@ -1035,6 +1268,8 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
         preventScrolling
         noWheelClassName="nowheel"
         selectionOnDrag={false}
+        snapToGrid={false}
+        snapGrid={[36, 36]}
         selectionKeyCode={mobileCanvasControlsActive ? null : WORKFLOW_SELECTION_KEY_CODE}
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode={mobileCanvasControlsActive ? null : WORKFLOW_MULTI_SELECTION_KEY_CODES}
@@ -1078,17 +1313,17 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
           id="workflow-grid-light"
           className="block dark:hidden"
           variant={BackgroundVariant.Dots}
-          gap={18}
-          size={1}
-          color="#cbd5e1"
+          gap={36}
+          size={1.5}
+          color="#94a3b8"
         />
         <Background
           id="workflow-grid-dark"
           className="hidden dark:block"
           variant={BackgroundVariant.Dots}
-          gap={18}
-          size={1}
-          color="rgba(148, 163, 184, 0.2)"
+          gap={36}
+          size={1.5}
+          color="rgba(148, 163, 184, 0.35)"
         />
         <WorkflowCanvasSelectionBridge activeSessionRef={selectionBoxSessionRef} />
         <WorkflowCanvasKeyboardBridge
@@ -1103,6 +1338,11 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
           canvasControlsLabel={canvasControlsLabel}
           selectedNodeIds={selectedNodeIds}
           onViewportCommit={persistViewport}
+          snapToGrid={snapToGrid}
+          onToggleSnapToGrid={onToggleSnapToGrid}
+          onAutoLayout={onAutoLayout}
+          snapToGridLabel={snapToGridLabel}
+          autoLayoutLabel={autoLayoutLabel}
         />
         <MiniMap<WorkflowCanvasNode>
           position="bottom-right"

@@ -36,8 +36,22 @@ export function ImageChatSessionList({
   return (
     <div className={containerClassName}>
       {isLoading ? (
-        <div className="flex justify-center py-12 text-slate-400">
-          <Loader2 size={18} className="animate-spin" />
+        <div className="flex gap-3 overflow-x-auto lg:flex-col lg:gap-2 lg:overflow-x-visible">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className={`flex shrink-0 items-center gap-3 rounded-2xl border border-slate-100 bg-white p-2.5 shadow-sm dark:border-slate-800/80 dark:bg-[#151f33] ${
+                variant === "desktop" ? "w-64 lg:w-auto" : "w-full"
+              }`}
+            >
+              <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-200 dark:bg-[#0a1020] animate-shimmer" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-3/4 rounded bg-slate-100 dark:bg-slate-800/60 animate-shimmer" />
+                <div className="h-3 w-1/2 rounded bg-slate-100 dark:bg-slate-800/60 animate-shimmer" />
+                <div className="h-3 w-1/3 rounded bg-slate-100 dark:bg-slate-800/60 animate-shimmer" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : items.length ? (
         items.map((item) => (

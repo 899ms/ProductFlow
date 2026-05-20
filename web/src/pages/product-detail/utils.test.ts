@@ -184,17 +184,13 @@ describe("product-detail utils", () => {
     ).toBe("调整输入后再运行");
   });
 
-  it("scopes visible image waiting state to image-generation and reference nodes", () => {
+  it("scopes visible image waiting state to reference nodes", () => {
     expect(isImageWorkflowNodeWaiting({ ...baseNode, node_type: "reference_image", status: "queued" })).toBe(true);
     expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "reference_image", status: "running" })).toBe(
       "承载图片节点更新中",
     );
-    expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "image_generation", status: "queued" })).toBe(
-      "图片排队生成",
-    );
-    expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "image_generation", status: "queued" }, stubT({
-      "detail.nodeWaiting.imageQueued": "Image queued",
-    }))).toBe("Image queued");
+    expect(isImageWorkflowNodeWaiting({ ...baseNode, node_type: "image_generation", status: "queued" })).toBe(false);
+    expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "image_generation", status: "queued" })).toBe("");
     expect(isImageWorkflowNodeWaiting({ ...baseNode, node_type: "copy_generation", status: "running" })).toBe(false);
     expect(imageWorkflowNodeWaitingLabel({ ...baseNode, node_type: "reference_image", status: "succeeded" })).toBe("");
   });

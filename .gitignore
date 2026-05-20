@@ -59,3 +59,9 @@ backend/backend/storage-dev/
 .codex/tmp/
 .codex/**/*.local.*
 .codex/**/*.py[cod]
+
+# Antigravity CLI local state
+.antigravitycli/
+
+# Local AI memory
+.ai_memory/

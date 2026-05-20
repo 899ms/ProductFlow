@@ -166,6 +166,14 @@ export function ProductDetailPage() {
   const [initialWorkflowCanvasZoom] = useState(() =>
     normalizeWorkflowZoom(readStoredNumber("productflow.workflow.zoom", 1)),
   );
+  const [snapToGrid, setSnapToGrid] = useState(() => {
+    const stored = window.localStorage.getItem("productflow.workflow.snapToGrid");
+    return stored === null ? true : stored === "true";
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem("productflow.workflow.snapToGrid", String(snapToGrid));
+  }, [snapToGrid]);
   const [draft, setDraft] = useState<NodeConfigDraft>(() =>
     draftFromNode(null),
   );
@@ -2045,6 +2053,11 @@ export function ProductDetailPage() {
               fitSelectionLabel={t("detail.fitSelection")}
               canvasControlsLabel={t("detail.canvasControls")}
               canvasMiniMapLabel={t("detail.canvasMiniMap")}
+              snapToGridLabel={t("detail.snapToGrid")}
+              autoLayoutLabel={t("detail.autoLayout")}
+              snapToGrid={snapToGrid}
+              onToggleSnapToGrid={() => setSnapToGrid((prev) => !prev)}
+              onAutoLayout={() => workflowCanvasRef.current?.triggerAutoLayout()}
               onBlankClick={handleCanvasBlankClick}
               onSelectNode={selectNodeFromPointer}
               onNodeDragCompleteSelect={selectNodeForDragStart}
@@ -2217,7 +2230,8 @@ export function ProductDetailPage() {
                 </div>
               </div>
               <div
-                className="min-h-0 flex-1 overflow-y-auto p-4"
+                key={`${activeSidebarTab}-${selectedNode?.id ?? ""}`}
+                className="min-h-0 flex-1 overflow-y-auto p-4 animate-spring-slide-in"
               >
                 {renderSidebarPanelContent()}
               </div>

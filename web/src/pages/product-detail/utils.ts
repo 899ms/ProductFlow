@@ -109,7 +109,7 @@ export function workflowNodeRunStatusLabel(status: WorkflowNodeRun["status"], t:
 
 export function isImageWorkflowNodeWaiting(node: WorkflowNode): boolean {
   return (
-    (node.node_type === "image_generation" || node.node_type === "reference_image") &&
+    node.node_type === "reference_image" &&
     (node.status === "queued" || node.status === "running")
   );
 }

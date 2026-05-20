@@ -68,6 +68,35 @@ export function RunsPanel({ workflow, latestRun, busyRunId, onRetryRun }: RunsPa
   const { t } = useI18n();
   const [promptPreview, setPromptPreview] = useState<PromptPreview | null>(null);
 
+  if (!workflow) {
+    return (
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-24 animate-shimmer" />
+          <div className="h-5 w-28 rounded-full animate-shimmer" />
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="space-y-3 rounded-xl border border-zinc-200 bg-white px-3 py-3.5 dark:border-slate-700/80 dark:bg-[#151f33]"
+            >
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-2.5 rounded-full animate-shimmer" />
+                <div className="h-4 w-28 animate-shimmer" />
+                <div className="ml-auto h-4 w-12 rounded animate-shimmer" />
+              </div>
+              <div className="space-y-1.5 pl-4.5">
+                <div className="h-3 w-3/4 animate-shimmer" />
+                <div className="h-3 w-1/2 animate-shimmer" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
